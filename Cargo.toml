@@ -1,0 +1,22 @@
+[package]
+authors = ["Kenny"]
+name = "goodmetrics_relay"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "goodmetrics"
+path = "src/client/client.rs"
+
+[[bin]]
+name = "goodmetricsd"
+path = "src/server/server.rs"
+
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+tonic = {version = "0.5.2", features = ["tls", "tls-roots", "tls-webpki-roots", "compression"]}
+prost = {version = "0.8.0"}
+
+[build-dependencies]
+tonic-build = {version = "0.5.2", features = ["compression"]}
