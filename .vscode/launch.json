@@ -18,7 +18,11 @@
                     "kind": "bin"
                 }
             },
-            "args": [],
+            "args": [
+                "send",
+                "{\"metric\": \"testservice_demonstrate\", \"dimensions\": [{\"name\": \"hostname\", \"value\": \"localhost\"}, {\"name\": \"customer\", \"value\": \"yourmom\"}], \"measurements\": [{\"name\":\"available_messages\", \"unix_nanos\": 21963782871, \"measurement\":{\"Gauge\":{\"value\":42.0}}}, {\"name\": \"outstanding_requests\", \"unix_nanos\": 21963782871, \"measurement\": {\"StatisticSet\": {\"min\": 3, \"max\": 8, \"sum\": 15, \"count\": 3}}}, {\"name\": \"demonstrate_us\", \"unix_nanos\": 21963782871, \"measurement\": {\"Histogram\": {\"buckets\": [{\"threshold\": 10, \"count\": 187}, {\"threshold\": 20, \"count\": 6}]}}} ]}",
+                "--"
+            ],
             "cwd": "${workspaceFolder}"
         },
         {

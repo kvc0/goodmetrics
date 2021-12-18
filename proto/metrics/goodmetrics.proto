@@ -21,7 +21,9 @@ message MetricsReply {
 message WorkflowMetric {
     // You should use lowercase_snake_case for this.
     // If you don't, you may be surprised to see lowercase_snake_case-ification in your database.
-    string workflow_name = 1;
+    // 
+    // Use names like: service_operation
+    string metric = 1;
     repeated Dimension dimensions = 2;
     repeated Measurement measurements = 3;
 }
@@ -33,10 +35,11 @@ message Dimension {
 
 message Measurement {
     string name = 1;
-    oneof measurement_type {
-        Gauge gauge = 2;
-        StatisticSet statistic_set = 3;
-        Histogram histogram = 4;
+    uint64 unix_nanos = 2;
+    oneof measurement {
+        Gauge gauge = 3;
+        StatisticSet statistic_set = 4;
+        Histogram histogram = 5;
     }
 }
 
