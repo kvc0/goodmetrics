@@ -33,7 +33,7 @@ message Dimension {
 
 message Measurement {
     string name = 1;
-    oneof type {
+    oneof measurement_type {
         Gauge gauge = 2;
         StatisticSet statistic_set = 3;
         Histogram histogram = 4;
