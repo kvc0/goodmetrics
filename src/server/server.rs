@@ -1,3 +1,4 @@
+use config::options::get_args;
 use tonic::{transport::Server};
 
 use std::{net::SocketAddr, cmp::min};
@@ -7,6 +8,7 @@ use metrics::{metrics_server::{MetricsServer, Metrics}, MetricsRequest, MetricsR
 pub mod metrics {
     tonic::include_proto!("goodmetrics");
 }
+mod config;
 
 #[derive(Debug, Default)]
 pub struct GoodMetricsServer {}
@@ -51,33 +53,6 @@ async fn serve(listen_socket_address: &String) {
         .serve_with_incoming(incoming)
         .await
         .unwrap();
-}
-
-use serde_derive::Deserialize;
-use structopt::StructOpt;
-use structopt_toml::StructOptToml;
-
-#[derive(Debug, Deserialize, StructOpt, StructOptToml)]
-#[serde(default)]
-struct Options {
-    #[structopt(long)] config: Option<String>,
-    #[structopt(long, default_value = "0.0.0.0:9573")] listen_socket_address: String,
-    #[structopt(long, default_value = "1")] max_threads: usize,
-    #[structopt(long, default_value = "debug")] log_level: String,
-}
-
-fn get_args() -> Options {
-    let command_line_args = Options::from_args();
-
-    match command_line_args.config {
-        Some(config_file_path) => {
-            let toml_str = std::fs::read_to_string(config_file_path).unwrap();
-            Options::from_args_with_toml(&toml_str).unwrap()
-        },
-        None => {
-            command_line_args
-        },
-    }
 }
 
 fn main() {
