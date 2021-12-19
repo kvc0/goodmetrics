@@ -1,45 +1,19 @@
-use tonic::{transport::Server, Request, Response, Status};
-
-use metrics::metrics_client::MetricsClient;
-use metrics::{Measurement, Histogram, Gauge, Dimension, Bucket, WorkflowMetric, MetricsRequest};
-
+use config::config::{get_args, Subcommand};
+use metrics::{WorkflowMetric, MetricsRequest};
 use structopt::StructOpt;
-use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, DisplayFromStr};
-
 
 pub mod metrics {
     tonic::include_proto!("goodmetrics");
 }
-
-#[derive(StructOpt)]
-#[structopt(about = "Good metrics: I never said they were great.")]
-struct Client {
-    #[structopt(name = "verbose", global = true, long, short)]
-    verbose: bool,
-
-    #[structopt(subcommand)]
-    command: Subcommand,
-}
-
-#[derive(StructOpt)]
-enum Subcommand {
-    #[structopt(about = "Send measurements")]
-    Send {
-        #[structopt(parse(try_from_str = serde_json::from_str))]
-        metrics: Vec<WorkflowMetric>,
-    },
-}
+mod config;
 
 #[tokio::main]
 async fn main() {
-    let args = Client::from_args();
-
-    let log_level = if args.verbose { "debug" } else { "info" };
+    let args = get_args();
 
     env_logger::Builder::from_env(
         env_logger::Env::default()
-            .default_filter_or(log_level)
+            .default_filter_or(args.log_level)
             .default_write_style_or("always"),
     )
     .init();
@@ -51,7 +25,7 @@ async fn main() {
             for metric in &metrics {
                 log::info!("parsed: {}", serde_json::to_string_pretty(&metric).unwrap());
             }
-            let mut client = match metrics::metrics_client::MetricsClient::connect("https://localhost:9753").await {
+            let mut client = match metrics::metrics_client::MetricsClient::connect("http://localhost:9573").await {
                 Ok(c) => {
                     log::debug!("connected: {:?}", c);
                     c
