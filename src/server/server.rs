@@ -7,6 +7,7 @@ use tokio::net::TcpListener;
 
 mod config;
 mod servers;
+mod sink;
 
 mod proto;
 use proto::metrics::pb::metrics_server::MetricsServer;
@@ -50,6 +51,8 @@ fn main() {
             .default_write_style_or("always"),
     )
     .init();
+
+    sink::postgres_sink();
 
     let mut handlers = Vec::new();
     for i in 0..min(args.max_threads, num_cpus::get()) {
