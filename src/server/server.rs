@@ -1,29 +1,15 @@
 use config::options::get_args;
-use tonic::{transport::Server};
+use servers::goodmetrics::GoodMetricsServer;
+use tonic::transport::Server;
 
 use std::{net::SocketAddr, cmp::min};
 use tokio::net::TcpListener;
 
-use metrics::{metrics_server::{MetricsServer, Metrics}, MetricsRequest, MetricsReply};
-pub mod metrics {
-    tonic::include_proto!("goodmetrics");
-}
 mod config;
+mod servers;
 
-#[derive(Debug, Default)]
-pub struct GoodMetricsServer {}
-
-#[tonic::async_trait]
-impl Metrics for GoodMetricsServer {
-    async fn send_metrics(
-        &self,
-        request: tonic::Request<MetricsRequest>,
-    ) -> Result<tonic::Response<MetricsReply>, tonic::Status> {
-        log::debug!("request: {:?}", request);
-
-        return Err(tonic::Status::unimplemented("it is not implemented"));
-    }
-}
+mod proto;
+use proto::metrics::pb::metrics_server::MetricsServer;
 
 async fn serve(listen_socket_address: &String) {
     let address: std::net::SocketAddr = listen_socket_address.parse().unwrap();

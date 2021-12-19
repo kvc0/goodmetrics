@@ -1,6 +1,5 @@
 use config::config::{get_args, Subcommand};
-use metrics::{WorkflowMetric, MetricsRequest};
-use structopt::StructOpt;
+use metrics::MetricsRequest;
 
 pub mod metrics {
     tonic::include_proto!("goodmetrics");
