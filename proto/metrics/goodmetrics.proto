@@ -37,14 +37,10 @@ message Measurement {
     string name = 1;
     uint64 unix_nanos = 2;
     oneof measurement {
-        Gauge gauge = 3;
+        double gauge = 3;
         StatisticSet statistic_set = 4;
         Histogram histogram = 5;
     }
-}
-
-message Gauge {
-    double value = 1;
 }
 
 message StatisticSet {

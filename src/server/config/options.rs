@@ -9,6 +9,8 @@ pub(crate) struct Options {
     #[structopt(long, default_value = "0.0.0.0:9573")] pub listen_socket_address: String,
     #[structopt(long, default_value = "1")] pub max_threads: usize,
     #[structopt(long, default_value = "debug")] pub log_level: String,
+
+    #[structopt(long, default_value = "host=localhost port=2345 user=metrics password=metrics connect_timeout=10")] pub connection_string: String,
 }
 
 pub(crate) fn get_args() -> Options {

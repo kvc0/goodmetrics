@@ -1,8 +1,9 @@
 use config::options::get_args;
 use servers::goodmetrics::GoodMetricsServer;
+use sink::postgres_sink::PostgresSinkProvider;
 use tonic::transport::Server;
 
-use std::{net::SocketAddr, cmp::min};
+use std::{net::SocketAddr, cmp::min, sync::Arc};
 use tokio::net::TcpListener;
 
 mod config;
@@ -12,8 +13,8 @@ mod sink;
 mod proto;
 use proto::metrics::pb::metrics_server::MetricsServer;
 
-async fn serve(listen_socket_address: &String) {
-    let address: std::net::SocketAddr = listen_socket_address.parse().unwrap();
+async fn serve(args: Arc<config::options::Options>) {
+    let address: std::net::SocketAddr = args.listen_socket_address.parse().unwrap();
     let socket = socket2::Socket::new(
         match address {
             SocketAddr::V4(_) => socket2::Domain::IPV4,
@@ -33,7 +34,14 @@ async fn serve(listen_socket_address: &String) {
     let listener = TcpListener::from_std(socket.into()).unwrap();
     let incoming = tokio_stream::wrappers::TcpListenerStream::new(listener);
 
-    let one_server_thread = GoodMetricsServer::default();
+    let sink_provider = PostgresSinkProvider {
+        connection_string: args.connection_string.clone(),
+    };
+
+    let one_server_thread = GoodMetricsServer{
+        metrics_sink_provider: sink_provider,
+    };
+
     let grpc_server = MetricsServer::new(one_server_thread);
     Server::builder()
         .add_service(grpc_server)
@@ -47,25 +55,32 @@ fn main() {
 
     env_logger::Builder::from_env(
         env_logger::Env::default()
-            .default_filter_or(args.log_level)
+            .default_filter_or(&args.log_level)
             .default_write_style_or("always"),
     )
     .init();
 
-    sink::postgres_sink();
+    tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(run_server(args));
+}
 
+async fn run_server(args: config::options::Options) {
     let mut handlers = Vec::new();
-    for i in 0..min(args.max_threads, num_cpus::get()) {
-        let listen_address = args.listen_socket_address.clone();
+    let args_shared = Arc::from(args);
 
+    for i in 0..min(args_shared.max_threads, num_cpus::get()) {
+        let threadlocal_args = args_shared.clone();
         let h = std::thread::spawn(move || {
-            log::info!("starting server thread {} listening on {}", i, listen_address);
+            log::info!("starting server thread {} listening on {}", i, &threadlocal_args.listen_socket_address);
 
             tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
                 .unwrap()
-                .block_on(serve(&listen_address));
+                .block_on(serve(threadlocal_args));
         });
         handlers.push(h);
     }
