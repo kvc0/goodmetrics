@@ -2,21 +2,12 @@ use tokio_postgres::{NoTls, tls::NoTlsStream, Socket};
 
 use crate::proto::metrics::pb::WorkflowMetric;
 
-use super::MetricsSink;
+use super::metricssendqueue::MetricsReceiveQueue;
 
-pub struct PostgresSink {
+pub struct PostgresSender {
     pub client: tokio_postgres::Client,
     pub connection: tokio_postgres::Connection<Socket, NoTlsStream>,
-}
-
-impl MetricsSink for PostgresSink {
-    fn drain(&self, metrics: Vec<WorkflowMetric>) -> Result<String, super::Error> {
-        for m in metrics {
-            log::info!("sinking metrics {:?}", m);
-        }
-
-        return Ok("done".to_string());
-    }
+    rx: MetricsReceiveQueue,
 }
 
 #[derive(Debug)]
@@ -25,21 +16,28 @@ pub struct Error {
     inner: tokio_postgres::Error,
 }
 
-impl PostgresSink {
-    pub async fn new_connection(connection_string: &String) -> Result<PostgresSink, Error> {
+impl PostgresSender {
+    pub async fn new_connection(connection_string: &String, rx: MetricsReceiveQueue) -> Result<PostgresSender, Error> {
         log::debug!("new_connection: {:?}", connection_string);
         let connection_future = tokio_postgres::connect(&connection_string, NoTls);
         match connection_future.await {
             Ok(connection_pair) => {
                 let (client, connection) = connection_pair;
-                Ok(PostgresSink {
+                Ok(PostgresSender {
                     client,
                     connection,
+                    rx,
                 })
             },
             Err(err) => {
                 Err(Error { message: "could not connect".to_string(), inner: err })
             },
+        }
+    }
+
+    pub async fn consume_stuff(&mut self) {
+        for batch in self.rx.rx.recv().await {
+            log::debug!("consumed: {:?}", batch)
         }
     }
 }

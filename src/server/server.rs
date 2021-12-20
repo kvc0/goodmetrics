@@ -1,6 +1,6 @@
 use config::options::get_args;
 use servers::goodmetrics::GoodMetricsServer;
-use sink::metricssendqueue::MetricsSendQueue;
+use sink::{metricssendqueue::MetricsSendQueue, postgres_sink::PostgresSender};
 use tonic::transport::Server;
 
 use std::{net::SocketAddr, cmp::min, sync::Arc};
@@ -13,7 +13,7 @@ mod sink;
 mod proto;
 use proto::metrics::pb::metrics_server::MetricsServer;
 
-async fn serve(args: Arc<config::options::Options>) {
+async fn serve(args: Arc<config::options::Options>, send_queue: MetricsSendQueue) {
     let address: std::net::SocketAddr = args.listen_socket_address.parse().unwrap();
     let socket = socket2::Socket::new(
         match address {
@@ -33,9 +33,6 @@ async fn serve(args: Arc<config::options::Options>) {
 
     let listener = TcpListener::from_std(socket.into()).unwrap();
     let incoming = tokio_stream::wrappers::TcpListenerStream::new(listener);
-
-    let send_queue = MetricsSendQueue {
-    };
 
     let one_server_thread = GoodMetricsServer{
         metrics_sink: send_queue,
@@ -69,9 +66,21 @@ fn main() {
 async fn run_server(args: config::options::Options) {
     let mut handlers = Vec::new();
     let args_shared = Arc::from(args);
+    let (send_queue, receive_queue) = MetricsSendQueue::new();
+    let sender = match PostgresSender::new_connection(&args_shared.connection_string, receive_queue).await {
+        Ok(sender) => {
+            sender
+        },
+        Err(e) => {
+            log::error!("failed to start server: {:?}", e);
+            std::process::exit(3)
+        },
+    };
 
     for i in 0..min(args_shared.max_threads, num_cpus::get()) {
         let threadlocal_args = args_shared.clone();
+        let thread_send_queue = send_queue.clone();
+
         let h = std::thread::spawn(move || {
             log::info!("starting server thread {} listening on {}", i, &threadlocal_args.listen_socket_address);
 
@@ -79,7 +88,7 @@ async fn run_server(args: config::options::Options) {
                 .enable_all()
                 .build()
                 .unwrap()
-                .block_on(serve(threadlocal_args));
+                .block_on(serve(threadlocal_args, thread_send_queue));
         });
         handlers.push(h);
     }
