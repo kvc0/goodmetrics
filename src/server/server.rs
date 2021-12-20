@@ -1,6 +1,6 @@
 use config::options::get_args;
 use servers::goodmetrics::GoodMetricsServer;
-use sink::postgres_sink::PostgresSinkProvider;
+use sink::metricssendqueue::MetricsSendQueue;
 use tonic::transport::Server;
 
 use std::{net::SocketAddr, cmp::min, sync::Arc};
@@ -34,12 +34,11 @@ async fn serve(args: Arc<config::options::Options>) {
     let listener = TcpListener::from_std(socket.into()).unwrap();
     let incoming = tokio_stream::wrappers::TcpListenerStream::new(listener);
 
-    let sink_provider = PostgresSinkProvider {
-        connection_string: args.connection_string.clone(),
+    let send_queue = MetricsSendQueue {
     };
 
     let one_server_thread = GoodMetricsServer{
-        metrics_sink_provider: sink_provider,
+        metrics_sink: send_queue,
     };
 
     let grpc_server = MetricsServer::new(one_server_thread);
