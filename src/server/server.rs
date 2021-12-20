@@ -67,7 +67,8 @@ async fn run_server(args: config::options::Options) {
     let mut handlers = Vec::new();
     let args_shared = Arc::from(args);
     let (send_queue, receive_queue) = MetricsSendQueue::new();
-    let sender = match PostgresSender::new_connection(&args_shared.connection_string, receive_queue).await {
+
+    let mut sender = match PostgresSender::new_connection(&args_shared.connection_string, receive_queue).await {
         Ok(sender) => {
             sender
         },
@@ -76,6 +77,15 @@ async fn run_server(args: config::options::Options) {
             std::process::exit(3)
         },
     };
+
+    // Consume stuff on a background task
+    let bg_task = std::thread::spawn(move || {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(sender.consume_stuff());
+    });
 
     for i in 0..min(args_shared.max_threads, num_cpus::get()) {
         let threadlocal_args = args_shared.clone();
@@ -93,6 +103,7 @@ async fn run_server(args: config::options::Options) {
         handlers.push(h);
     }
 
+    bg_task.join().unwrap();
     for h in handlers {
         h.join().unwrap();
     }

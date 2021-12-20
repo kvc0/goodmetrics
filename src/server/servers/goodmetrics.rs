@@ -28,7 +28,7 @@ impl Metrics for GoodMetricsServer {
             },
             Err(e) => {
                 match e {
-                    crate::sink::Error::QueueFull => {
+                    crate::sink::ErrorCode::QueueFull => {
                         Err(tonic::Status::resource_exhausted("No space left in the send buffer"))
                     },
                 }

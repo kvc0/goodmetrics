@@ -36,8 +36,10 @@ impl PostgresSender {
     }
 
     pub async fn consume_stuff(&mut self) {
+        log::info!("started consumer");
         for batch in self.rx.rx.recv().await {
             log::debug!("consumed: {:?}", batch)
         }
+        log::info!("ended consumer");
     }
 }

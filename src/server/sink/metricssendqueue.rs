@@ -2,7 +2,7 @@ use tokio::sync::mpsc::{self, Sender, Receiver};
 
 use crate::proto::metrics::pb::WorkflowMetric;
 
-use super::MetricsSink;
+use super::{MetricsSink, ErrorCode};
 
 
 #[derive(Debug, Clone)]
@@ -15,10 +15,15 @@ pub struct MetricsReceiveQueue {
 }
 
 impl MetricsSink for MetricsSendQueue {
-    fn drain(&self, metrics: Vec<WorkflowMetric>) -> Result<String, super::Error> {
-        log::debug!("collecting: {:?}", metrics);
-
-        Ok("collected".to_string())
+    fn drain(&self, metrics: Vec<WorkflowMetric>) -> Result<String, super::ErrorCode> {
+        match self.tx.try_send(metrics) {
+            Ok(_) => {
+                Ok("collected".to_string())
+            },
+            Err(e) => {
+                Err(ErrorCode::QueueFull)
+            },
+        }
     }
 }
 

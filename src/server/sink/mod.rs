@@ -4,10 +4,10 @@ pub mod postgres_sink;
 pub mod metricssendqueue;
 
 pub trait MetricsSink: Send {
-    fn drain(&self, metrics: Vec<WorkflowMetric>) -> Result<String, Error>;
+    fn drain(&self, metrics: Vec<WorkflowMetric>) -> Result<String, ErrorCode>;
 }
 
 #[derive(Debug)]
-pub enum Error {
+pub enum ErrorCode {
     QueueFull
 }
