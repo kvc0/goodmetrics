@@ -79,12 +79,8 @@ async fn run_server(args: config::options::Options) {
     };
 
     // Consume stuff on a background task
-    let bg_task = std::thread::spawn(move || {
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap()
-            .block_on(sender.consume_stuff());
+    let bg_task = tokio::spawn(async move {
+            sender.consume_stuff().await
     });
 
     for i in 0..min(args_shared.max_threads, num_cpus::get()) {
@@ -103,7 +99,10 @@ async fn run_server(args: config::options::Options) {
         handlers.push(h);
     }
 
-    bg_task.join().unwrap();
+    match bg_task.await {
+        Ok(_) => log::info!("background task ended ok"),
+        Err(e) => log::info!("background task failed {:?}", e),
+    };
     for h in handlers {
         h.join().unwrap();
     }

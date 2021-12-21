@@ -11,30 +11,31 @@ service Metrics {
 }
 
 message MetricsRequest {
-    repeated Dimension shared_dimensions = 1;
-    repeated WorkflowMetric metrics = 2;
+    map<string, Dimension> shared_dimensions = 1;
+    repeated Datum metrics = 2;
 }
 
 message MetricsReply {
 }
 
-message WorkflowMetric {
+message Datum {
     // You should use lowercase_snake_case for this.
     // If you don't, you may be surprised to see lowercase_snake_case-ification in your database.
     // 
     // Use names like: service_operation
     string metric = 1;
-    repeated Dimension dimensions = 2;
-    repeated Measurement measurements = 3;
+    map<string, Dimension> dimensions = 2;
+    map<string, Measurement> measurements = 3;
 }
 
 message Dimension {
-    string name = 1;
-    string value = 2;
+    oneof value {
+        string string = 1;
+        uint64 number = 2;
+    }
 }
 
 message Measurement {
-    string name = 1;
     uint64 unix_nanos = 2;
     oneof measurement {
         double gauge = 3;

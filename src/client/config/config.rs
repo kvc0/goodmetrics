@@ -3,7 +3,7 @@ use structopt::{StructOpt};
 use structopt_toml::StructOptToml;
 use lazy_static::lazy_static;
 
-use crate::metrics::WorkflowMetric;
+use crate::metrics::Datum;
 
 lazy_static! {
     static ref DEFAULT_DIR: String = default_dir();
@@ -38,7 +38,7 @@ pub(crate) enum Subcommand {
     #[structopt(about = "Send measurements")]
     Send {
         #[structopt(parse(try_from_str = serde_json::from_str))]
-        metrics: Vec<WorkflowMetric>,
+        metrics: Vec<Datum>,
     },
 }
 

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use config::config::{get_args, Subcommand};
 use metrics::MetricsRequest;
 
@@ -36,7 +38,7 @@ async fn main() {
             };
 
             let result = client.send_metrics(MetricsRequest {
-                shared_dimensions: vec!(),
+                shared_dimensions: HashMap::new(),
                 metrics: metrics,
             }).await;
             match result {

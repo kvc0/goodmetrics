@@ -7,7 +7,7 @@ fn main() {
         .build_server(true)
         .type_attribute(".", "#[derive(serde::Deserialize, serde::Serialize)]")
         // .type_attribute("goodmetrics.Measurement.MeasurementType", "use serde::{Deserialize};")
-        // .type_attribute("goodmetrics.WorkflowMetric", derivation)
+        // .type_attribute("goodmetrics.Datum", derivation)
         // .type_attribute("goodmetrics.Dimension", derivation)
         // .type_attribute("goodmetrics.Measurement", derivation)
         // .type_attribute("goodmetrics.Measurement.measurement_type", derivation)

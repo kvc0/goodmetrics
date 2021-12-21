@@ -1,10 +1,10 @@
-use crate::proto::metrics::pb::WorkflowMetric;
+use crate::proto::metrics::pb::Datum;
 
 pub mod postgres_sink;
 pub mod metricssendqueue;
 
 pub trait MetricsSink: Send {
-    fn drain(&self, metrics: Vec<WorkflowMetric>) -> Result<String, ErrorCode>;
+    fn drain(&self, metrics: Vec<Datum>) -> Result<String, ErrorCode>;
 }
 
 #[derive(Debug)]
