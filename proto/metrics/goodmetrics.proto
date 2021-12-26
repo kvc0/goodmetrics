@@ -24,8 +24,9 @@ message Datum {
     // 
     // Use names like: service_operation
     string metric = 1;
-    map<string, Dimension> dimensions = 2;
-    map<string, Measurement> measurements = 3;
+    uint64 unix_nanos = 2;
+    map<string, Dimension> dimensions = 3;
+    map<string, Measurement> measurements = 4;
 }
 
 message Dimension {
@@ -36,11 +37,10 @@ message Dimension {
 }
 
 message Measurement {
-    uint64 unix_nanos = 2;
     oneof measurement {
-        double gauge = 3;
-        StatisticSet statistic_set = 4;
-        Histogram histogram = 5;
+        double gauge = 1;
+        StatisticSet statistic_set = 2;
+        Histogram histogram = 3;
     }
 }
 

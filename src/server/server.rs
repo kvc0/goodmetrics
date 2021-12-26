@@ -4,7 +4,7 @@ use sink::{metricssendqueue::MetricsSendQueue, postgres_sink::PostgresSender};
 use tonic::transport::Server;
 
 use std::{net::SocketAddr, cmp::min, sync::Arc};
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, join};
 
 mod config;
 mod servers;
@@ -79,9 +79,7 @@ async fn run_server(args: config::options::Options) {
     };
 
     // Consume stuff on a background task
-    let bg_task = tokio::spawn(async move {
-            sender.consume_stuff().await
-    });
+    let bg_task = sender.consume_stuff();
 
     for i in 0..min(args_shared.max_threads, num_cpus::get()) {
         let threadlocal_args = args_shared.clone();
@@ -99,10 +97,8 @@ async fn run_server(args: config::options::Options) {
         handlers.push(h);
     }
 
-    match bg_task.await {
-        Ok(_) => log::info!("background task ended ok"),
-        Err(e) => log::info!("background task failed {:?}", e),
-    };
+    join!(bg_task);
+
     for h in handlers {
         h.join().unwrap();
     }
