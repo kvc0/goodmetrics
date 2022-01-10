@@ -45,10 +45,10 @@ message Measurement {
 }
 
 message StatisticSet {
-    double min = 1;
-    double max = 2;
-    double sum = 3;
-    double count = 4;
+    double minimum = 1;
+    double maximum = 2;
+    double samplesum = 3;
+    double samplecount = 4;
 }
 
 message Histogram {

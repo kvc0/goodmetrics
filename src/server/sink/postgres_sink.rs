@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, any::Any, rc::Rc};
+use std::{collections::{HashMap, HashSet, BTreeMap}, any::Any, rc::Rc, future::Future};
 
 use cached::{proc_macro::cached, Cached};
 use itertools::Itertools;
@@ -8,7 +8,7 @@ use serde::Serialize;
 use serde_json::json;
 use tokio_postgres::{NoTls, tls::NoTlsStream, Socket, Connection, GenericClient};
 
-use crate::proto::metrics::pb::{Datum, Dimension, dimension::Value, measurement::Measurement};
+use crate::proto::metrics::pb::{Datum, Dimension, dimension::Value, measurement::Measurement, self};
 
 use super::metricssendqueue::MetricsReceiveQueue;
 
@@ -66,18 +66,56 @@ impl PostgresSender {
 
             let grouped_rows = grouped_metrics.into_iter().map( |(metric, datums_iter)| {
                 log::info!("metric: {:?}", metric);
-                let datums: Vec<&Datum> = datums_iter.into_iter().collect();
+                let mut schema: HashMap<String, &str> = HashMap::new();
 
-                let rows = datums.iter().map(|datum| {
+                let rows = datums_iter.into_iter().map(|datum| {
+                    // ------ I don't think this stuff is needed
+                    // for (dimension_name, value) in datum.dimensions {
+                    //     match column_exists(metric.clone(), dimension_name.clone()) {
+                    //         Some(it_does) => {
+                    //             if !it_does {
+                    //                 let a = self.add_column(metric, &dimension_name, &"text".to_string());
+                    //                 ddl_futures.push(a);
+                    //             }
+                    //         },
+                    //         None => {
+                    //             let a = self.add_column(metric, &dimension_name, &"text".to_string());
+                    //             ddl_futures.push(a);
+                    //         },
+                    //     }
+                    // }
+                    // for (measurement_name, measurement) in datum.measurements {
+                    //     match column_exists(metric.clone(), measurement_name.clone()) {
+                    //         Some(it_does) => {
+                    //             if !it_does {
+                    //                 let a = self.add_column(metric, &measurement_name, sql_data_type(&measurement));
+                    //                 ddl_futures.push(a);
+                    //             }
+                    //         },
+                    //         None => {
+                    //             let a = self.add_column(metric, &measurement_name, &"text".to_string());
+                    //             ddl_futures.push(a);
+                    //         },
+                    //     }
+                    // }
+                    // ------ I don't think this stuff is needed
+
                     let mut m = serde_json::map::Map::new();
 
                     m["time"] = json!(datum.unix_nanos);
+                    schema.insert("time".to_string(), "timestamptz");
                     datum.dimensions.iter().for_each(|(name, dim)| {
                         match &dim.value {
                             Some(v) => {
                                 m[name] = match v {
-                                    Value::String(s) => json!(s),
-                                    Value::Number(n) => json!(n),
+                                    Value::String(s) => {
+                                        schema.insert(name.clone(), "text");
+                                        json!(s)
+                                    },
+                                    Value::Number(n) => {
+                                        schema.insert(name.clone(), "bigint"); // 64 bit integer
+                                        json!(n)
+                                    },
                                 }
                             },
                             None => {},
@@ -99,13 +137,34 @@ impl PostgresSender {
                     m
                 });
                 // FIXME: Why is this collecting into a map of groups of insanity?
-                rows.collect_vec()
+                let rows_vector = rows.collect_vec();
+                (metric, rows_vector, schema)
             });
 
-            // COLUMN_EXISTS_CACHE.lock().unwrap().cache_set((metric, "c"), true);
-            // let sql_insert_header = format!("INSERT INTO {table} select * from json_populate_recordset(null::mm, $1);\n",
-            //     table = clean_id(metric),
-            // );
+            // why does rust make me define stupid temporary mutable variables just
+            // to tell it the types, when it KNOWS the types and will freak out when I do this
+            // incorrecty.
+            let mut a: (&String, Vec<serde_json::map::Map<String, serde_json::Value>>, HashMap<String, &str>);
+            for b in grouped_rows {
+                a = b;
+                let metric = a.0;
+                let rows = a.1;
+                let schema = a.2;
+
+                // with data as (select * from json_to_recordset('[{"i": 1, "s": "s1", "a": "a1"},{"time":1600000000,"s":"s2","a":"a2","i":2,"k":"k2"}]') as (a text, i integer, s text, time int))
+                //   insert into mm (a, i, s, time) select a, i, s, to_timestamp(time) as time from data;
+                let sql_insert = format!("with data as (
+                        select * from json_to_recordset($1) as ({schema_list})
+                    )
+                    insert into {table} ({name_list}) select to_timestamp(time), {name_list_without_time} as time
+                    from data;",
+                    table = clean_id(metric),
+                    schema_list = "a int,b text,time timestamptz",
+                    name_list = "a,b,time",
+                    name_list_without_time = "a,b"
+                );
+            }
+
 
             // batch.iter().map(|d| {
             //     d.metric
@@ -128,11 +187,35 @@ impl PostgresSender {
         }
         log::info!("ended consumer");
     }
+
+    async fn add_column(&mut self, table_name: &String, column_name: &String, data_type: &str) -> Result<u64, tokio_postgres::Error> {
+        let a = self.client.execute(
+        &format!(
+                "alter table {table} add column {column} {data_type}",
+                table=table_name,
+                column=column_name,
+                data_type=data_type,
+            ),
+            &[],
+        ).await;
+        if a.is_ok() {
+            COLUMN_EXISTS_CACHE.lock().unwrap().cache_set((table_name.clone(), column_name.clone()), true);
+        }
+        a
+    }
 }
 
 #[cached(name = "COLUMN_EXISTS_CACHE", size=8192, time=600, option = true)]
 fn column_exists(table: String, column: String) -> Option<bool> {
     None
+}
+
+fn sql_data_type(measurement: &pb::Measurement) -> &'static str {
+    match measurement.measurement.as_ref().unwrap() {
+        Measurement::Gauge(_) => "double precision",
+        Measurement::StatisticSet(_) => "statistic_set",
+        Measurement::Histogram(h) => "histogram",
+    }
 }
 
 fn clean_id(s: &String) -> String {
