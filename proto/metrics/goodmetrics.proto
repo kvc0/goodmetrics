@@ -33,6 +33,7 @@ message Dimension {
     oneof value {
         string string = 1;
         uint64 number = 2;
+        bool boolean = 3;
     }
 }
 

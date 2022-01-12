@@ -36,7 +36,9 @@ log = { version = "^0.4.14" }
 
 itertools = { version = "0.10.3" }
 regex = { version = "1.5.4" }
-cached = { version = "0.26.2" }
+cached = { version = "0.28.0" }
+thiserror = { version = "1.0" }
+futures = { version = "0.3.19" }
 
 [build-dependencies]
 tonic-build = {version = "0.6.2", features = ["compression"]}

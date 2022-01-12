@@ -147,9 +147,9 @@ checksum = "c4872d67bab6358e59559027aa3b9157c53d9358c51423c17554809a8858e0f8"
 
 [[package]]
 name = "cached"
-version = "0.26.2"
+version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2bc2fd249a24a9cdd4276f3a3e0461713271ab63b0e9e656e200e8e21c8c927"
+checksum = "8a8ac555743865f63ab1e9ab8deaff0751fe2e5d31d7c163e5c211b8ac3aacd8"
 dependencies = [
  "async-mutex",
  "async-rwlock",
@@ -163,9 +163,9 @@ dependencies = [
 
 [[package]]
 name = "cached_proc_macro"
-version = "0.7.1"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac3531903b39df48a378a7ed515baee7c1fff32488489c7d0725eb1749b22a91"
+checksum = "b9cf77b2ea47455deb498cfd422ab261bfb495ca6556bea3db7866be187e9c84"
 dependencies = [
  "cached_proc_macro_types",
  "darling",
@@ -525,6 +525,7 @@ dependencies = [
  "cached",
  "dirs",
  "env_logger",
+ "futures",
  "itertools",
  "lazy_static",
  "log",
@@ -537,6 +538,7 @@ dependencies = [
  "socket2",
  "structopt",
  "structopt-toml",
+ "thiserror",
  "tokio",
  "tokio-postgres",
  "tokio-stream",
@@ -1504,6 +1506,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d326610f408c7a4eb6f51c37c330e496b08506c9457c9d34287ecc38809fb060"
 dependencies = [
  "unicode-width",
+]
+
+[[package]]
+name = "thiserror"
+version = "1.0.30"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "854babe52e4df1653706b98fcfc05843010039b406875930a70e4d9644e5c417"
+dependencies = [
+ "thiserror-impl",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "1.0.30"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa32fd3f627f367fe16f893e2597ae3c05020f8bba2666a4e6ea73d377e5714b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
