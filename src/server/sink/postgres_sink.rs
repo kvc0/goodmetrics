@@ -63,18 +63,20 @@ impl PostgresSender {
 
         while let Some(batch) = self.rx.recv().await {
             let grouped_metrics = group_metrics(batch);
-            // OOPS!!! I made all this stuff work on the grouped metrics instead of per-group.
-            // Each group is a table :facepalm: I'm tired.
-
-            let dimension_types = get_dimension_type_map(&grouped_metrics);
-            let measurement_types = get_measurement_type_map(&grouped_metrics);
-
-            let all_column_types = get_all_column_types(&dimension_types, &measurement_types);
 
             let tx = self.client.transaction().await?;
-            let sink = tx.copy_in(&format!("copy mm (time, ss) from stdin with format binary")).await?;
-            let writer = BinaryCopyInWriter::new(sink, &all_column_types);
-            let num_written = write(writer, &dimension_types, &measurement_types, datums).await?;
+
+            for (metric, datums) in grouped_metrics.iter() {
+                let dimension_types = get_dimension_type_map(datums);
+                let measurement_types = get_measurement_type_map(datums);
+
+                let all_column_types = get_all_column_types(&dimension_types, &measurement_types);
+
+                let sink = tx.copy_in(&format!("copy mm (time, ss) from stdin with format binary")).await?;
+                let writer = BinaryCopyInWriter::new(sink, &all_column_types);
+                let num_written = write(writer, &dimension_types, &measurement_types, datums).await?;
+            }
+
             tx.commit().await?;
         }
         log::info!("ended consumer");
@@ -312,17 +314,14 @@ fn group_metrics<'a>(batch: Vec<Datum>) -> BTreeMap<&'a String, Vec<&'a Datum>> 
     grouped_metrics
 }
 
-fn get_dimension_type_map(grouped_metrics: &BTreeMap<&String, Vec<&Datum>>) -> BTreeMap<String, Type> {
-    grouped_metrics
+fn get_dimension_type_map(datums: &Vec<&Datum>) -> BTreeMap<String, Type> {
+    datums
         .iter()
-        .flat_map(|(metric, datums)| {
-            datums
-                .iter()
-                .map(|d| {
-                    d.dimensions.iter()
-                })
-                .flatten()
-        }).filter_map(|(dimension_name, dimension_value)| {
+        .map(|d| {
+            d.dimensions.iter()
+        })
+        .flatten()
+        .filter_map(|(dimension_name, dimension_value)| {
             if let Some(sql_type) = dimension_value.sql_type() {
                 Some(
                     (dimension_name.clone(), sql_type)
@@ -334,17 +333,14 @@ fn get_dimension_type_map(grouped_metrics: &BTreeMap<&String, Vec<&Datum>>) -> B
         .collect()
 }
 
-fn get_measurement_type_map(grouped_metrics: &BTreeMap<&String, Vec<&Datum>>) -> BTreeMap<String, Type> {
-    grouped_metrics
+fn get_measurement_type_map(datums: &Vec<&Datum>) -> BTreeMap<String, Type> {
+    datums
         .iter()
-        .flat_map(|(metric, datums)| {
-            datums
-                .iter()
-                .map(|d| {
-                    d.measurements.iter()
-                })
-                .flatten()
-        }).filter_map(|(measurement_name, measurement_value)| {
+        .map(|d| {
+            d.measurements.iter()
+        })
+        .flatten()
+        .filter_map(|(measurement_name, measurement_value)| {
             if let Some(sql_type) = measurement_value.sql_type() {
                 Some(
                     (measurement_name.clone(), sql_type)
