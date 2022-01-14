@@ -21,6 +21,7 @@
             "args": [
                 "send",
                 "{\"metric\": \"testservice_demonstrate\", \"dimensions\": {\"hostname\": {\"string\": \"localhost\"}, \"customer\": {\"string\": \"yourmom\"}}, \"measurements\": {\"available_messages\": {\"unix_nanos\": 21963782871, \"measurement\":{\"Gauge\":42.0}}, \"outstanding_requests\": {\"unix_nanos\": 21963782871, \"measurement\": {\"StatisticSet\": {\"min\": 3, \"max\": 8, \"sum\": 15, \"count\": 3}}}, \"demonstrate_us\": {\"unix_nanos\": 21963782871, \"measurement\": {\"Histogram\": {\"buckets\": [{\"threshold\": 10, \"count\": 187}, {\"threshold\": 20, \"count\": 6}]}}} }}",
+                // {"metric": "mm", "unix_nanos": 21963782871, "dimensions": {"hostname": {"string": "localhost"}, "customer": {"string": "yourmom"}}, "measurements": {"available_messages": {"measurement":{"Gauge":42.0}}, "outstanding_requests": {"measurement": {"StatisticSet": {"minimum": 3, "maximum": 8, "samplesum": 15, "samplecount": 3}}}, "demonstrate_us": {"measurement": {"Histogram": {"buckets": [{"threshold": 10, "count": 187}, {"threshold": 20, "count": 6}]}}} }}
                 "--"
             ],
             "cwd": "${workspaceFolder}"
@@ -38,6 +39,9 @@
                     "name": "goodmetricsd",
                     "kind": "bin"
                 }
+            },
+            "env": {
+                "RUST_BACKTRACE": "1"
             },
             "args": [
                 "--connection-string", "host=192.168.1.201 port=2345 user=metrics password=metrics dbname=metrics connect_timeout=10",

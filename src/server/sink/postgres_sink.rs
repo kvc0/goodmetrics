@@ -1,16 +1,14 @@
-use std::{collections::{HashMap, HashSet, BTreeMap}, any::Any, rc::Rc, future::Future};
+use std::collections::BTreeMap;
 
 use cached::{proc_macro::cached, Cached};
 use futures::pin_mut;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use regex::Regex;
-use serde::Serialize;
-use serde_json::json;
 use thiserror::Error;
-use tokio_postgres::{NoTls, tls::NoTlsStream, Socket, Connection, GenericClient, types::{Type, ToSql}, CopyInSink, binary_copy::BinaryCopyInWriter};
+use tokio_postgres::{NoTls, tls::NoTlsStream, Socket, Connection, types::{Type, ToSql}, binary_copy::BinaryCopyInWriter, error::SqlState};
 
-use crate::proto::metrics::pb::{Datum, Dimension, dimension::Value, measurement::Measurement, self, StatisticSet};
+use crate::proto::metrics::{pb, pb::{Datum, Dimension, dimension::Value, measurement::Measurement}};
 
 use super::metricssendqueue::MetricsReceiveQueue;
 
@@ -26,7 +24,10 @@ pub struct Error {
 }
 
 lazy_static! {
-    static ref not_whitespace: Regex = Regex::new(r"[^\w]+").unwrap();
+    static ref NOT_WHITESPACE: Regex = Regex::new(r"[^\w]+").unwrap();
+
+    // column "available_messages" of relation "table_name" does not exist
+    static ref UNDEFINED_COLUMN: Regex = Regex::new(r#"column "(?P<column>.+)" of relation "(?P<table>.+)" does not exist"#).unwrap();
 }
 
 impl PostgresSender {
@@ -62,165 +63,70 @@ impl PostgresSender {
         log::info!("started consumer");
 
         while let Some(batch) = self.rx.recv().await {
-            let grouped_metrics = group_metrics(batch);
-
-            let tx = self.client.transaction().await?;
-
-            for (metric, datums) in grouped_metrics.iter() {
-                let dimension_types = get_dimension_type_map(datums);
-                let measurement_types = get_measurement_type_map(datums);
-
-                let all_column_types = get_all_column_types(&dimension_types, &measurement_types);
-
-                let sink = tx.copy_in(&format!("copy mm (time, ss) from stdin with format binary")).await?;
-                let writer = BinaryCopyInWriter::new(sink, &all_column_types);
-                let num_written = write(writer, &dimension_types, &measurement_types, datums).await?;
+            let grouped_metrics = group_metrics(&batch);
+            let mut try_again = true;
+            while try_again {
+                try_again = false;
+                match self.run_a_batch(&grouped_metrics).await {
+                    Ok(rows) => log::info!("committed ${rows}", rows = rows),
+                    Err(e) => {
+                        log::error!("{:?}", e);
+                        match e {
+                            SinkError::Postgres(postgres_error) => {
+                                match postgres_error.as_db_error() {
+                                    Some(dberror) => {
+                                        match dberror.code() {
+                                            &SqlState::UNDEFINED_COLUMN => {
+                                                let pair = UNDEFINED_COLUMN.captures(dberror.message()).unwrap();
+                                                let table = pair.name("table").unwrap().as_str();
+                                                let column = pair.name("column").unwrap().as_str();
+                                                log::info!("missing column: {table}.{column}", table = table, column = column)
+                                            }
+                                            _ => {
+                                                log::error!("unhandled db error: ${err:?}", err = dberror)
+                                            }
+                                        }
+                                    },
+                                    None => {
+                                        log::error!("postgres error: ${err:?}", err = postgres_error)
+                                    },
+                                }
+                            },
+                        }
+                    },
+                }
             }
-
-            tx.commit().await?;
         }
         log::info!("ended consumer");
         Ok(1)
-        // {
-        //     let grouped_rows = grouped_metrics.into_iter().map( |(metric, datums_iter)| {
-        //         log::info!("metric: {:?}", metric);
-        //         let mut schema: HashMap<String, &str> = HashMap::new();
+    }
 
-        //         let mut col_types = vec![Type::TIMESTAMP, Type::OID];
+    async fn run_a_batch(&mut self, grouped_metrics: &BTreeMap<&String, Vec<&Datum>>) -> Result<usize, SinkError> {
+        let transaction = self.client.transaction().await?;
 
-        //         let mut schema_map: BTreeMap<String, Type> = BTreeMap::new();
-        //         let rows = datums_iter.into_iter().map(|datum| {
-        //             for (dimension_name, value) in datum.dimensions.iter() {
-        //                 if let Some(sql_type) = value.sql_type() {
-        //                     schema_map.insert(dimension_name.clone(), sql_type);
-        //                 }
-        //             }
+        let mut rows = 0;
+        for (metric, datums) in grouped_metrics.iter() {
+            let dimension_types = get_dimension_type_map(datums);
+            let measurement_types = get_measurement_type_map(datums);
 
-        //             for (measurement_name, measurement_value) in datum.measurements.iter() {
+            let all_column_types = get_all_column_types(&dimension_types, &measurement_types);
+            let all_column_names = get_all_column_names(&dimension_types, &measurement_types);
 
-        //             }
-        //         });
+            let sink = transaction.copy_in(
+                &format!(
+                    "copy {table_name} ({all_columns}) from stdin with binary",
+                    table_name = clean_id(metric),
+                    all_columns = all_column_names.join(","),
+                )
+            ).await?;
 
-        //         let rows = datums_iter.into_iter().map(|datum| {
-        //             // ------ I don't think this stuff is needed
-        //             // for (dimension_name, value) in datum.dimensions {
-        //             //     match column_exists(metric.clone(), dimension_name.clone()) {
-        //             //         Some(it_does) => {
-        //             //             if !it_does {
-        //             //                 let a = self.add_column(metric, &dimension_name, &"text".to_string());
-        //             //                 ddl_futures.push(a);
-        //             //             }
-        //             //         },
-        //             //         None => {
-        //             //             let a = self.add_column(metric, &dimension_name, &"text".to_string());
-        //             //             ddl_futures.push(a);
-        //             //         },
-        //             //     }
-        //             // }
-        //             // for (measurement_name, measurement) in datum.measurements {
-        //             //     match column_exists(metric.clone(), measurement_name.clone()) {
-        //             //         Some(it_does) => {
-        //             //             if !it_does {
-        //             //                 let a = self.add_column(metric, &measurement_name, sql_data_type(&measurement));
-        //             //                 ddl_futures.push(a);
-        //             //             }
-        //             //         },
-        //             //         None => {
-        //             //             let a = self.add_column(metric, &measurement_name, &"text".to_string());
-        //             //             ddl_futures.push(a);
-        //             //         },
-        //             //     }
-        //             // }
-        //             // ------ I don't think this stuff is needed
+            let writer = BinaryCopyInWriter::new(sink, &all_column_types);
+            rows += write_and_close(writer, &dimension_types, &measurement_types, &datums).await?;
+        }
 
-        //             let mut m = serde_json::map::Map::new();
+        transaction.commit().await?;
 
-        //             m["time"] = json!(datum.unix_nanos);
-        //             schema.insert("time".to_string(), "timestamptz");
-        //             datum.dimensions.iter().for_each(|(name, dim)| {
-        //                 match &dim.value {
-        //                     Some(v) => {
-        //                         m[name] = match v {
-        //                             Value::String(s) => {
-        //                                 schema.insert(name.clone(), "text");
-        //                                 json!(s)
-        //                             },
-        //                             Value::Number(n) => {
-        //                                 schema.insert(name.clone(), "bigint"); // 64 bit integer
-        //                                 json!(n)
-        //                             },
-        //                             Value::Boolean(b) => {
-        //                                 schema.insert(name.clone(), "boolean");
-        //                                 json!(b)
-        //                             },
-        //                         }
-        //                     },
-        //                     None => {},
-        //                 }
-        //             });
-
-        //             datum.measurements.iter().for_each(|(name, measurement)| {
-        //                 match &measurement.measurement {
-        //                     Some(measurement_kind) => {
-        //                         m[name] = match measurement_kind {
-        //                             Measurement::Gauge(gauge) => json!(gauge),
-        //                             Measurement::StatisticSet(statistic_set) => json!(statistic_set),
-        //                             Measurement::Histogram(histogram) => json!(histogram),
-        //                         }
-        //                     },
-        //                     None => {},
-        //                 }
-        //             });
-        //             m
-        //         });
-        //         // FIXME: Why is this collecting into a map of groups of insanity?
-        //         let rows_vector = rows.collect_vec();
-        //         (metric, rows_vector, schema)
-        //     });
-
-        //     // why does rust make me define stupid temporary mutable variables just
-        //     // to tell it the types, when it KNOWS the types and will freak out when I do this
-        //     // incorrecty.
-        //     let mut a: (&String, Vec<serde_json::map::Map<String, serde_json::Value>>, HashMap<String, &str>);
-        //     for b in grouped_rows {
-        //         a = b;
-        //         let metric = a.0;
-        //         let rows = a.1;
-        //         let schema = a.2;
-
-        //         // with data as (select * from json_to_recordset('[{"i": 1, "s": "s1", "a": "a1"},{"time":1600000000,"s":"s2","a":"a2","i":2,"k":"k2"}]') as (a text, i integer, s text, time int))
-        //         //   insert into mm (a, i, s, time) select a, i, s, to_timestamp(time) as time from data;
-        //         let sql_insert = format!("with data as (
-        //                 select * from json_to_recordset($1) as ({schema_list})
-        //             )
-        //             insert into {table} ({name_list}) select to_timestamp(time), {name_list_without_time} as time
-        //             from data;",
-        //             table = clean_id(metric),
-        //             schema_list = "a int,b text,time timestamptz",
-        //             name_list = "a,b,time",
-        //             name_list_without_time = "a,b"
-        //         );
-        //     }
-
-        //     // batch.iter().map(|d| {
-        //     //     d.metric
-        //     // });
-        //     // batch.iter().flat_map(|d| {
-        //     //     d.dimensions.keys()
-        //     // });
-
-        //     // self.client.query("select (ARRAY[3, 2, 1]);", &[]).await
-        //     // let query_future = self.client.query("SELECT $1::TEXT", &[&"hello world"]);
-        //     let query_future = self.client.query("SELECT '123'", &[]);
-        //     log::debug!("got future");
-        //     let query_result = query_future.await;
-        //     log::debug!("got result: {:?}", query_result);
-
-        //     match query_result {
-        //         Ok(number) => log::info!("well.. sql worked {:?}", number),
-        //         Err(e) => log::error!("sql failed: {:?}", e),
-        //     };
-        // }
+        Ok(rows)
     }
 
     async fn add_column(&mut self, table_name: &String, column_name: &String, data_type: &str) -> Result<u64, tokio_postgres::Error> {
@@ -238,18 +144,9 @@ impl PostgresSender {
         }
         a
     }
-
-    // async fn execute(&self, data: Vec<Measurement>) -> Result<usize> {
-    //     let tx = self.client.transaction().await?;
-    //     let sink = tx.copy_in(self.copy_stm.as_str()).await?;
-    //     let writer = BinaryCopyInWriter::new(sink, &self.col_types);
-    //     let num_written = write(writer, &data).await?;
-    //     tx.commit().await?;
-    //     Ok(num_written)
-    // }
 }
 
-async fn write(writer: BinaryCopyInWriter, dimensions: &BTreeMap<String, Type>, measurements: &BTreeMap<String, Type>, data: &Vec<Datum>) -> Result<usize, SinkError> {
+async fn write_and_close(writer: BinaryCopyInWriter, dimensions: &BTreeMap<String, Type>, measurements: &BTreeMap<String, Type>, data: &Vec<&Datum>) -> Result<usize, SinkError> {
     pin_mut!(writer);
 
     let mut row: Vec<Box<(dyn ToSql + Sync)>> = Vec::new();
@@ -288,9 +185,7 @@ async fn write(writer: BinaryCopyInWriter, dimensions: &BTreeMap<String, Type>, 
         let vec_of_raw_refs = row.iter().map(|c| { c.as_ref() }).collect_vec();
         writer.as_mut().write(&vec_of_raw_refs).await?;
     }
-
     writer.finish().await?;
-
     Ok(data.len())
 }
 
@@ -302,7 +197,15 @@ fn get_all_column_types(dimension_types: &BTreeMap<String, Type>, measurement_ty
     all_column_types
 }
 
-fn group_metrics<'a>(batch: Vec<Datum>) -> BTreeMap<&'a String, Vec<&'a Datum>> {
+// time, dimensions[], measurements[]
+fn get_all_column_names(dimension_types: &BTreeMap<String, Type>, measurement_types: &BTreeMap<String, Type>) -> Vec<String> {
+    let mut all_column_types: Vec<String> = vec!["time".to_string()];
+    all_column_types.extend(dimension_types.keys().map(|d| { clean_id(d) }));
+    all_column_types.extend(measurement_types.keys().map(|m| { clean_id(m) }));
+    all_column_types
+}
+
+fn group_metrics<'a>(batch: &'a Vec<Datum>) -> BTreeMap<&'a String, Vec<&Datum>> {
     let grouped_metrics: BTreeMap<&String, Vec<&Datum>> = batch.iter()
         .sorted_by_key(|d| {&d.metric})
         .group_by(|d| {&d.metric})
@@ -398,41 +301,16 @@ fn column_exists(table: String, column: String) -> Option<bool> {
     None
 }
 
-fn sql_data_type(measurement: &pb::Measurement) -> &'static str {
+fn sql_data_type_string(measurement: &pb::Measurement) -> &'static str {
     match measurement.measurement.as_ref().unwrap() {
         Measurement::Gauge(_) => "double precision",
         Measurement::StatisticSet(_) => "statistic_set",
-        Measurement::Histogram(h) => "histogram",
+        Measurement::Histogram(_) => "histogram",
     }
 }
 
 fn clean_id(s: &String) -> String {
     let l = s.to_lowercase();
-    let a = not_whitespace.replace_all(&l, "_");
+    let a = NOT_WHITESPACE.replace_all(&l, "_");
     a.to_string()
-}
-
-struct MetricsBatch {
-    tables: Vec<MetricsTable>,
-}
-
-struct MetricsTable {
-    columns: HashMap<String, MetricsColumn>,
-    rows: Vec<Datum>,
-}
-
-struct MetricsColumn {
-    name: String,
-}
-
-impl MetricsColumn {
-}
-
-impl MetricsTable {
-    fn get_sql_column_names(&self) -> impl Iterator<Item = &String> {
-        let a = self.columns.values().map(|column| {
-            &column.name
-        });
-        a
-    }
 }
