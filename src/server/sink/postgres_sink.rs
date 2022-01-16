@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, error::Error, any::Any, fmt::Display, time::{SystemTime, Duration}};
 
 use cached::{proc_macro::cached, Cached};
 use futures::pin_mut;
@@ -6,7 +6,7 @@ use itertools::Itertools;
 use lazy_static::lazy_static;
 use regex::Regex;
 use thiserror::Error;
-use tokio_postgres::{NoTls, tls::NoTlsStream, Socket, Connection, types::{Type, ToSql}, binary_copy::BinaryCopyInWriter, error::SqlState};
+use tokio_postgres::{NoTls, tls::NoTlsStream, Socket, Connection, types::{Type, ToSql, WrongType}, binary_copy::BinaryCopyInWriter, error::SqlState};
 
 use crate::proto::metrics::{pb, pb::{Datum, Dimension, dimension::Value, measurement::Measurement}};
 
@@ -17,10 +17,28 @@ pub struct PostgresSender {
     rx: MetricsReceiveQueue,
 }
 
-#[derive(Debug)]
-pub struct Error {
+#[derive(Debug, Error)]
+pub struct DescribedError {
     pub message: String,
     pub inner: tokio_postgres::Error,
+}
+
+impl Display for DescribedError {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fmt.debug_struct("DescribedError")
+            .field("message", &self.message)
+            .field("cause", &self.inner)
+            .finish()
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum SinkError {
+    #[error("unhandled postgres error")]
+    Postgres(#[from] tokio_postgres::Error),
+
+    #[error("Some postgres error with a description")]
+    DescribedError(#[from] DescribedError),
 }
 
 lazy_static! {
@@ -31,7 +49,7 @@ lazy_static! {
 }
 
 impl PostgresSender {
-    pub async fn new_connection(connection_string: &String, rx: MetricsReceiveQueue) -> Result<PostgresSender, Error> {
+    pub async fn new_connection(connection_string: &String, rx: MetricsReceiveQueue) -> Result<PostgresSender, SinkError> {
         log::debug!("new_connection: {:?}", connection_string);
         let connection_future = tokio_postgres::connect(&connection_string, NoTls);
         match connection_future.await {
@@ -46,7 +64,7 @@ impl PostgresSender {
                 })
             },
             Err(err) => {
-                Err(Error { message: "could not connect".to_string(), inner: err })
+                Err(SinkError::DescribedError(DescribedError { message: "could not connect".to_string(), inner: err }))
             },
         }
     }
@@ -73,8 +91,6 @@ impl PostgresSender {
                         false
                     },
                     Err(e) => {
-                        log::error!("{:?}", e);
-
                         match handle_error_and_should_it_retry(e).await {
                             Ok(should_retry) => {
                                 should_retry
@@ -152,6 +168,11 @@ async fn handle_error_and_should_it_retry(e: SinkError) -> Result<bool, SinkErro
 
                             Ok(true)
                         }
+                        &SqlState::INSUFFICIENT_PRIVILEGE => {
+                            log::error!("{}. Do you need to grant permissions or reset the table's owner?", dberror.message());
+
+                            Ok(false)
+                        },
                         _ => {
                             log::error!("unhandled db error: ${err:?}", err = dberror);
 
@@ -160,12 +181,26 @@ async fn handle_error_and_should_it_retry(e: SinkError) -> Result<bool, SinkErro
                     }
                 },
                 None => {
-                    log::error!("postgres error: ${err:?}", err = postgres_error);
+                    match postgres_error.source() {
+                        Some(client_error) => {
+                            if client_error.is::<WrongType>() {
+                                log::error!("Dropping batch due to mismatch between postgres type and batch type: {:?}", client_error);
 
-                    Ok(false)
+                                Ok(false)
+                            } else {
+                                Ok(false)
+                            }
+                        },
+                        None => {
+                            log::error!("postgres without cause: ${err:?}", err = postgres_error);
+
+                            Ok(false)
+                        },
+                    }
                 },
             }
         },
+        SinkError::DescribedError(e) => todo!(),
     }
 }
 
@@ -175,7 +210,8 @@ async fn write_and_close(writer: BinaryCopyInWriter, dimensions: &BTreeMap<Strin
     let mut row: Vec<Box<(dyn ToSql + Sync)>> = Vec::new();
     for datum in data {
         row.clear();
-        row.push(Box::new(datum.unix_nanos as i64));
+        let datum_time = SystemTime::UNIX_EPOCH + Duration::from_nanos(datum.unix_nanos);
+        row.push(Box::new(datum_time));
         for dimension_name in dimensions.keys() {
             let dimension = &datum.dimensions[dimension_name];
             if let Some(value) = dimension.value.as_ref() {
@@ -311,12 +347,6 @@ impl ToSqlType for pb::Measurement {
             None => None,
         }
     }
-}
-
-#[derive(Error, Debug)]
-pub enum SinkError {
-    #[error("unhandled postgres error")]
-    Postgres(#[from] tokio_postgres::Error),
 }
 
 #[cached(name = "COLUMN_EXISTS_CACHE", size=8192, time=600, option = true)]
