@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, error::Error, any::Any, fmt::Display, time::{SystemTime, Duration}};
+use std::{collections::BTreeMap, error::Error, fmt::Display, time::{SystemTime, Duration}};
 
 use cached::{proc_macro::cached, Cached};
 use futures::pin_mut;
@@ -7,8 +7,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use thiserror::Error;
 use tokio_postgres::{NoTls, tls::NoTlsStream, Socket, Connection, types::{Type, ToSql, WrongType}, binary_copy::BinaryCopyInWriter, error::SqlState};
-
-use crate::proto::metrics::{pb, pb::{Datum, Dimension, dimension::Value, measurement::Measurement}};
+use crate::proto::metrics::pb::{Datum, dimension, measurement, Dimension, Measurement};
 
 use super::metricssendqueue::MetricsReceiveQueue;
 
@@ -217,9 +216,9 @@ async fn write_and_close(writer: BinaryCopyInWriter, dimensions: &BTreeMap<Strin
             if let Some(value) = dimension.value.as_ref() {
                 row.push(
                     match value {
-                        Value::String(s) => Box::new(s),
-                        Value::Number(n) => Box::new(*n as i64),
-                        Value::Boolean(b) => Box::new(b),
+                        dimension::Value::String(s) => Box::new(s),
+                        dimension::Value::Number(n) => Box::new(*n as i64),
+                        dimension::Value::Boolean(b) => Box::new(b),
                     }
                 )
             } else {
@@ -228,12 +227,12 @@ async fn write_and_close(writer: BinaryCopyInWriter, dimensions: &BTreeMap<Strin
         }
         for measurement_name in measurements.keys() {
             let measurement = &datum.measurements[measurement_name];
-            if let Some(value) = measurement.measurement.as_ref() {
+            if let Some(value) = measurement.value.as_ref() {
                 row.push(
                     match value {
-                        Measurement::Gauge(g) => Box::new(g),
-                        Measurement::StatisticSet(s) => Box::new(vec![s.minimum, s.maximum, s.samplesum, s.samplecount]),
-                        Measurement::Histogram(h) => todo!(),
+                        measurement::Value::Gauge(g) => Box::new(g),
+                        measurement::Value::StatisticSet(s) => Box::new(vec![s.minimum, s.maximum, s.samplesum, s.samplecount]),
+                        measurement::Value::Histogram(h) => todo!(),
                     }
                 )
             } else {
@@ -323,9 +322,9 @@ impl ToSqlType for Dimension {
         match self.value.as_ref() {
             Some(v) => {
                 Some(match v {
-                    Value::String(_) => Type::TEXT,
-                    Value::Number(_) => Type::INT8,
-                    Value::Boolean(_) => Type::BOOL,
+                    dimension::Value::String(_) => Type::TEXT,
+                    dimension::Value::Number(_) => Type::INT8,
+                    dimension::Value::Boolean(_) => Type::BOOL,
                 })
             },
             None => None,
@@ -333,15 +332,15 @@ impl ToSqlType for Dimension {
     }
 }
 
-impl ToSqlType for pb::Measurement {
+impl ToSqlType for Measurement {
     fn sql_type(&self) -> Option<Type> {
-        match self.measurement.as_ref() {
+        match self.value.as_ref() {
             Some(v) => {
                 Some(match v {
-                    Measurement::Gauge(_) => Type::FLOAT8,
+                    measurement::Value::Gauge(_) => Type::FLOAT8,
                     // Composite type thing
-                    Measurement::StatisticSet(_) => Type::RECORD,
-                    Measurement::Histogram(_) => Type::RECORD,
+                    measurement::Value::StatisticSet(_) => Type::RECORD,
+                    measurement::Value::Histogram(_) => Type::RECORD,
                 })
             },
             None => None,
@@ -354,11 +353,11 @@ fn column_exists(table: String, column: String) -> Option<bool> {
     None
 }
 
-fn sql_data_type_string(measurement: &pb::Measurement) -> &'static str {
-    match measurement.measurement.as_ref().unwrap() {
-        Measurement::Gauge(_) => "double precision",
-        Measurement::StatisticSet(_) => "statistic_set",
-        Measurement::Histogram(_) => "histogram",
+fn sql_data_type_string(measurement: &Measurement) -> &'static str {
+    match measurement.value.as_ref().unwrap() {
+        measurement::Value::Gauge(_) => "double precision",
+        measurement::Value::StatisticSet(_) => "statistic_set",
+        measurement::Value::Histogram(_) => "histogram",
     }
 }
 
