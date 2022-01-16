@@ -66,31 +66,23 @@ impl PostgresSender {
             let grouped_metrics = group_metrics(&batch);
             let mut try_again = true;
             while try_again {
-                try_again = false;
-                match self.run_a_batch(&grouped_metrics).await {
-                    Ok(rows) => log::info!("committed ${rows}", rows = rows),
+                try_again = match self.run_a_batch(&grouped_metrics).await {
+                    Ok(rows) => {
+                        log::info!("committed ${rows}", rows = rows);
+
+                        false
+                    },
                     Err(e) => {
                         log::error!("{:?}", e);
-                        match e {
-                            SinkError::Postgres(postgres_error) => {
-                                match postgres_error.as_db_error() {
-                                    Some(dberror) => {
-                                        match dberror.code() {
-                                            &SqlState::UNDEFINED_COLUMN => {
-                                                let pair = UNDEFINED_COLUMN.captures(dberror.message()).unwrap();
-                                                let table = pair.name("table").unwrap().as_str();
-                                                let column = pair.name("column").unwrap().as_str();
-                                                log::info!("missing column: {table}.{column}", table = table, column = column)
-                                            }
-                                            _ => {
-                                                log::error!("unhandled db error: ${err:?}", err = dberror)
-                                            }
-                                        }
-                                    },
-                                    None => {
-                                        log::error!("postgres error: ${err:?}", err = postgres_error)
-                                    },
-                                }
+
+                        match handle_error_and_should_it_retry(e).await {
+                            Ok(should_retry) => {
+                                should_retry
+                            },
+                            Err(retry_failure) => {
+                                log::error!("failed to handle error: {:?}", retry_failure);
+
+                                false
                             },
                         }
                     },
@@ -143,6 +135,37 @@ impl PostgresSender {
             COLUMN_EXISTS_CACHE.lock().unwrap().cache_set((table_name.clone(), column_name.clone()), true);
         }
         a
+    }
+}
+
+async fn handle_error_and_should_it_retry(e: SinkError) -> Result<bool, SinkError> {
+    return match e {
+        SinkError::Postgres(postgres_error) => {
+            match postgres_error.as_db_error() {
+                Some(dberror) => {
+                    match dberror.code() {
+                        &SqlState::UNDEFINED_COLUMN => {
+                            let pair = UNDEFINED_COLUMN.captures(dberror.message()).unwrap();
+                            let table = pair.name("table").unwrap().as_str();
+                            let column = pair.name("column").unwrap().as_str();
+                            log::info!("missing column: {table}.{column}", table = table, column = column);
+
+                            Ok(true)
+                        }
+                        _ => {
+                            log::error!("unhandled db error: ${err:?}", err = dberror);
+
+                            Ok(false)
+                        }
+                    }
+                },
+                None => {
+                    log::error!("postgres error: ${err:?}", err = postgres_error);
+
+                    Ok(false)
+                },
+            }
+        },
     }
 }
 
