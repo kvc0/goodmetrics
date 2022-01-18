@@ -6,7 +6,9 @@ fn main() {
     tonic_build::configure()
         .build_server(true)
         .type_attribute(".", "#[derive(serde::Deserialize, serde::Serialize)]")
-        // .type_attribute("goodmetrics.Measurement.MeasurementType", "use serde::{Deserialize};")
+        .type_attribute("goodmetrics.StatisticSet", "#[derive(postgres_types::ToSql, postgres_types::FromSql)]")
+        // LOL YOU GOTTA USE TYPE NAME "record" FOR COMPOSITE TYPES BECAUSE THE LIBRARY FLIPS ITS LID OTHERWISE
+        .type_attribute("goodmetrics.StatisticSet", r#"#[postgres(name = "statistic_set")]"#)
         // .type_attribute("goodmetrics.Datum", derivation)
         // .type_attribute("goodmetrics.Dimension", derivation)
         // .type_attribute("goodmetrics.Measurement", derivation)

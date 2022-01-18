@@ -49,7 +49,7 @@ message StatisticSet {
     double minimum = 1;
     double maximum = 2;
     double samplesum = 3;
-    double samplecount = 4;
+    int64 samplecount = 4;
 }
 
 message Histogram {

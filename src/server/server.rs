@@ -9,6 +9,7 @@ use tokio::{net::TcpListener, join};
 mod config;
 mod servers;
 mod sink;
+mod postgres_things;
 
 mod proto;
 use proto::metrics::pb::metrics_server::MetricsServer;

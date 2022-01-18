@@ -7,13 +7,14 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use thiserror::Error;
 use tokio_postgres::{NoTls, tls::NoTlsStream, Socket, Connection, types::{Type, ToSql, WrongType}, binary_copy::BinaryCopyInWriter, error::SqlState};
-use crate::proto::metrics::pb::{Datum, dimension, measurement, Dimension, Measurement};
+use crate::{proto::metrics::pb::{Datum, dimension, measurement, Dimension, Measurement}, postgres_things::statistic_set::get_or_create_statistic_set_type};
 
 use super::metricssendqueue::MetricsReceiveQueue;
 
 pub struct PostgresSender {
     pub client: tokio_postgres::Client,
     rx: MetricsReceiveQueue,
+    statistic_set_type: Type,
 }
 
 #[derive(Debug, Error)]
@@ -57,9 +58,13 @@ impl PostgresSender {
                 tokio::spawn(async move {
                     PostgresSender::run_connection(connection).await
                 });
+
+                let statistic_set_type = get_or_create_statistic_set_type(&client).await?;
+
                 Ok(PostgresSender {
                     client,
                     rx,
+                    statistic_set_type,
                 })
             },
             Err(err) => {
@@ -231,7 +236,8 @@ async fn write_and_close(writer: BinaryCopyInWriter, dimensions: &BTreeMap<Strin
                 row.push(
                     match value {
                         measurement::Value::Gauge(g) => Box::new(g),
-                        measurement::Value::StatisticSet(s) => Box::new(vec![s.minimum, s.maximum, s.samplesum, s.samplecount]),
+                        // measurement::Value::StatisticSet(s) => Box::new((s.minimum, s.maximum, s.samplesum, s.samplecount)),
+                        measurement::Value::StatisticSet(s) => Box::new(s),
                         measurement::Value::Histogram(h) => todo!(),
                     }
                 )
