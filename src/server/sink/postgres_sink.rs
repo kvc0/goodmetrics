@@ -1,20 +1,19 @@
 use std::{collections::BTreeMap, error::Error, fmt::Display, time::{SystemTime, Duration}};
 
-use cached::{proc_macro::cached, Cached};
 use futures::pin_mut;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use regex::Regex;
 use thiserror::Error;
 use tokio_postgres::{NoTls, tls::NoTlsStream, Socket, Connection, types::{Type, ToSql, WrongType}, binary_copy::BinaryCopyInWriter, error::SqlState};
-use crate::{proto::metrics::pb::{Datum, dimension, measurement, Dimension, Measurement}, postgres_things::statistic_set::get_or_create_statistic_set_type};
+use crate::{proto::metrics::pb::{Datum, dimension, measurement, Dimension, Measurement}, postgres_things::{statistic_set::get_or_create_statistic_set_type, ddl::clean_id, type_conversion::TypeConverter}};
 
 use super::metricssendqueue::MetricsReceiveQueue;
 
 pub struct PostgresSender {
     pub client: tokio_postgres::Client,
     rx: MetricsReceiveQueue,
-    statistic_set_type: Type,
+    type_converter: TypeConverter,
 }
 
 #[derive(Debug, Error)]
@@ -42,8 +41,6 @@ pub enum SinkError {
 }
 
 lazy_static! {
-    static ref NOT_WHITESPACE: Regex = Regex::new(r"[^\w]+").unwrap();
-
     // column "available_messages" of relation "table_name" does not exist
     static ref UNDEFINED_COLUMN: Regex = Regex::new(r#"column "(?P<column>.+)" of relation "(?P<table>.+)" does not exist"#).unwrap();
 }
@@ -60,11 +57,15 @@ impl PostgresSender {
                 });
 
                 let statistic_set_type = get_or_create_statistic_set_type(&client).await?;
+                let converter = TypeConverter {
+                    statistic_set_type: statistic_set_type,
+                    histogram_type: Type::RECORD, // TODO do the histogram type
+                };
 
                 Ok(PostgresSender {
                     client,
                     rx,
-                    statistic_set_type,
+                    type_converter: converter,
                 })
             },
             Err(err) => {
@@ -118,8 +119,8 @@ impl PostgresSender {
 
         let mut rows = 0;
         for (metric, datums) in grouped_metrics.iter() {
-            let dimension_types = get_dimension_type_map(datums);
-            let measurement_types = get_measurement_type_map(datums);
+            let dimension_types = self.type_converter.get_dimension_type_map(datums);
+            let measurement_types = self.type_converter.get_measurement_type_map(datums);
 
             let all_column_types = get_all_column_types(&dimension_types, &measurement_types);
             let all_column_names = get_all_column_names(&dimension_types, &measurement_types);
@@ -139,22 +140,6 @@ impl PostgresSender {
         transaction.commit().await?;
 
         Ok(rows)
-    }
-
-    async fn add_column(&mut self, table_name: &String, column_name: &String, data_type: &str) -> Result<u64, tokio_postgres::Error> {
-        let a = self.client.execute(
-        &format!(
-                "alter table {table} add column {column} {data_type}",
-                table=table_name,
-                column=column_name,
-                data_type=data_type,
-            ),
-            &[],
-        ).await;
-        if a.is_ok() {
-            COLUMN_EXISTS_CACHE.lock().unwrap().cache_set((table_name.clone(), column_name.clone()), true);
-        }
-        a
     }
 }
 
@@ -281,94 +266,10 @@ fn group_metrics<'a>(batch: &'a Vec<Datum>) -> BTreeMap<&'a String, Vec<&Datum>>
     grouped_metrics
 }
 
-fn get_dimension_type_map(datums: &Vec<&Datum>) -> BTreeMap<String, Type> {
-    datums
-        .iter()
-        .map(|d| {
-            d.dimensions.iter()
-        })
-        .flatten()
-        .filter_map(|(dimension_name, dimension_value)| {
-            if let Some(sql_type) = dimension_value.sql_type() {
-                Some(
-                    (dimension_name.clone(), sql_type)
-                )
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
-fn get_measurement_type_map(datums: &Vec<&Datum>) -> BTreeMap<String, Type> {
-    datums
-        .iter()
-        .map(|d| {
-            d.measurements.iter()
-        })
-        .flatten()
-        .filter_map(|(measurement_name, measurement_value)| {
-            if let Some(sql_type) = measurement_value.sql_type() {
-                Some(
-                    (measurement_name.clone(), sql_type)
-                )
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
-trait ToSqlType {
-    fn sql_type(&self) -> Option<Type>;
-}
-
-impl ToSqlType for Dimension {
-    fn sql_type(&self) -> Option<Type> {
-        match self.value.as_ref() {
-            Some(v) => {
-                Some(match v {
-                    dimension::Value::String(_) => Type::TEXT,
-                    dimension::Value::Number(_) => Type::INT8,
-                    dimension::Value::Boolean(_) => Type::BOOL,
-                })
-            },
-            None => None,
-        }
-    }
-}
-
-impl ToSqlType for Measurement {
-    fn sql_type(&self) -> Option<Type> {
-        match self.value.as_ref() {
-            Some(v) => {
-                Some(match v {
-                    measurement::Value::Gauge(_) => Type::FLOAT8,
-                    // Composite type thing
-                    measurement::Value::StatisticSet(_) => Type::RECORD,
-                    measurement::Value::Histogram(_) => Type::RECORD,
-                })
-            },
-            None => None,
-        }
-    }
-}
-
-#[cached(name = "COLUMN_EXISTS_CACHE", size=8192, time=600, option = true)]
-fn column_exists(table: String, column: String) -> Option<bool> {
-    None
-}
-
 fn sql_data_type_string(measurement: &Measurement) -> &'static str {
     match measurement.value.as_ref().unwrap() {
         measurement::Value::Gauge(_) => "double precision",
         measurement::Value::StatisticSet(_) => "statistic_set",
         measurement::Value::Histogram(_) => "histogram",
     }
-}
-
-fn clean_id(s: &String) -> String {
-    let l = s.to_lowercase();
-    let a = NOT_WHITESPACE.replace_all(&l, "_");
-    a.to_string()
 }
