@@ -5,8 +5,8 @@ use itertools::Itertools;
 use lazy_static::lazy_static;
 use regex::Regex;
 use thiserror::Error;
-use tokio_postgres::{NoTls, tls::NoTlsStream, Socket, Connection, types::{Type, ToSql, WrongType}, binary_copy::BinaryCopyInWriter, error::SqlState};
-use crate::{proto::metrics::pb::{Datum, dimension, measurement, Dimension, Measurement}, postgres_things::{statistic_set::get_or_create_statistic_set_type, ddl::clean_id, type_conversion::TypeConverter}};
+use tokio_postgres::{NoTls, tls::NoTlsStream, Socket, Connection, types::{Type, ToSql, WrongType}, binary_copy::BinaryCopyInWriter, error::SqlState, CopyInSink};
+use crate::{proto::metrics::pb::{Datum, dimension, measurement, Dimension, Measurement}, postgres_things::{statistic_set::get_or_create_statistic_set_type, ddl::{clean_id, add_column}, type_conversion::TypeConverter}};
 
 use super::metricssendqueue::MetricsReceiveQueue;
 
@@ -31,6 +31,37 @@ impl Display for DescribedError {
     }
 }
 
+#[derive(Debug, Error)]
+pub struct MissingColumn {
+    pub table: String,
+    pub column: String,
+    pub data_type: String,
+}
+
+impl Display for MissingColumn {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fmt.debug_struct("DescribedError")
+            .field("table", &self.table)
+            .field("column", &self.column)
+            .finish()
+    }
+}
+
+#[derive(Debug, Error)]
+pub struct MissingTable {
+    pub table: String,
+    pub datum: Datum,
+}
+
+impl Display for MissingTable {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fmt.debug_struct("DescribedError")
+            .field("table", &self.table)
+            .field("datum", &self.datum)
+            .finish()
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum SinkError {
     #[error("unhandled postgres error")]
@@ -38,6 +69,12 @@ pub enum SinkError {
 
     #[error("Some postgres error with a description")]
     DescribedError(#[from] DescribedError),
+
+    #[error("i gotta have more column")]
+    MissingColumn(#[from] MissingColumn),
+
+    #[error("i gotta have more table")]
+    MissingTable(#[from] MissingTable),
 }
 
 lazy_static! {
@@ -96,7 +133,7 @@ impl PostgresSender {
                         false
                     },
                     Err(e) => {
-                        match handle_error_and_should_it_retry(e).await {
+                        match self.handle_error_and_should_it_retry(e).await {
                             Ok(should_retry) => {
                                 should_retry
                             },
@@ -115,7 +152,8 @@ impl PostgresSender {
     }
 
     async fn run_a_batch(&mut self, grouped_metrics: &BTreeMap<&String, Vec<&Datum>>) -> Result<usize, SinkError> {
-        let transaction = self.client.transaction().await?;
+        let client = &mut self.client;
+        let transaction = client.transaction().await?;
 
         let mut rows = 0;
         for (metric, datums) in grouped_metrics.iter() {
@@ -125,13 +163,61 @@ impl PostgresSender {
             let all_column_types = get_all_column_types(&dimension_types, &measurement_types);
             let all_column_names = get_all_column_names(&dimension_types, &measurement_types);
 
-            let sink = transaction.copy_in(
+            let sink: CopyInSink<bytes::Bytes> = match transaction.copy_in::<String, bytes::Bytes>(
                 &format!(
                     "copy {table_name} ({all_columns}) from stdin with binary",
                     table_name = clean_id(metric),
                     all_columns = all_column_names.join(","),
                 )
-            ).await?;
+            ).await {
+                Ok(sink) => sink,
+                Err(postgres_error) => {
+                    match postgres_error.as_db_error() {
+                        Some(dberror) => {
+                            match dberror.code() {
+                                &SqlState::UNDEFINED_COLUMN => {
+                                    let pair = UNDEFINED_COLUMN.captures(dberror.message()).unwrap();
+                                    let table = pair.name("table").unwrap().as_str();
+                                    let column = pair.name("column").unwrap().as_str();
+                                    log::info!("missing column: {table}.{column}", table = table, column = column);
+                                    let the_type = datums.iter()
+                                        .filter_map(|d| {
+                                            match d.dimensions.get(column) {
+                                                Some(dim) => Some(sql_dimension_type_string(dim)),
+                                                None => {
+                                                    match d.measurements.get(column) {
+                                                        Some(measurement) => Some(sql_data_type_string(measurement)),
+                                                        None => None,
+                                                    }
+                                                },
+                                            }
+                                        })
+                                        .next();
+                                    match the_type {
+                                        Some(t) => {
+                                            return Err(SinkError::MissingColumn( MissingColumn {
+                                                table: table.to_string(),
+                                                column: column.to_string(),
+                                                data_type: t.to_string(),
+                                            } ))
+                                        },
+                                        None => {
+                                            return Err(SinkError::DescribedError( DescribedError {
+                                                message: "Type not foud, can't add column".to_string(),
+                                                inner: postgres_error
+                                            } ))
+                                        },
+                                    }
+                                },
+                                _ => {
+                                    return Err(SinkError::Postgres(postgres_error));
+                                },
+                            }
+                        },
+                        None => return Err(SinkError::Postgres(postgres_error))
+                    }
+                },
+            };
 
             let writer = BinaryCopyInWriter::new(sink, &all_column_types);
             rows += write_and_close(writer, &dimension_types, &measurement_types, &datums).await?;
@@ -141,55 +227,61 @@ impl PostgresSender {
 
         Ok(rows)
     }
-}
 
-async fn handle_error_and_should_it_retry(e: SinkError) -> Result<bool, SinkError> {
-    return match e {
-        SinkError::Postgres(postgres_error) => {
-            match postgres_error.as_db_error() {
-                Some(dberror) => {
-                    match dberror.code() {
-                        &SqlState::UNDEFINED_COLUMN => {
-                            let pair = UNDEFINED_COLUMN.captures(dberror.message()).unwrap();
-                            let table = pair.name("table").unwrap().as_str();
-                            let column = pair.name("column").unwrap().as_str();
-                            log::info!("missing column: {table}.{column}", table = table, column = column);
-
-                            Ok(true)
-                        }
-                        &SqlState::INSUFFICIENT_PRIVILEGE => {
-                            log::error!("{}. Do you need to grant permissions or reset the table's owner?", dberror.message());
-
-                            Ok(false)
-                        },
-                        _ => {
-                            log::error!("unhandled db error: ${err:?}", err = dberror);
-
-                            Ok(false)
-                        }
-                    }
-                },
-                None => {
-                    match postgres_error.source() {
-                        Some(client_error) => {
-                            if client_error.is::<WrongType>() {
-                                log::error!("Dropping batch due to mismatch between postgres type and batch type: {:?}", client_error);
-
+    async fn handle_error_and_should_it_retry(&self, e: SinkError) -> Result<bool, SinkError> {
+        return match e {
+            SinkError::Postgres(postgres_error) => {
+                match postgres_error.as_db_error() {
+                    Some(dberror) => {
+                        match dberror.code() {
+                            &SqlState::INSUFFICIENT_PRIVILEGE => {
+                                log::error!("Do you need to grant permissions or reset the table's owner? {:?}", dberror);
+    
                                 Ok(false)
-                            } else {
+                            },
+                            _ => {
+                                log::error!("unhandled db error: ${err:?}", err = dberror);
+    
                                 Ok(false)
                             }
-                        },
-                        None => {
-                            log::error!("postgres without cause: ${err:?}", err = postgres_error);
+                        }
+                    },
+                    None => {
+                        match postgres_error.source() {
+                            Some(client_error) => {
+                                if client_error.is::<WrongType>() {
+                                    log::error!("Dropping batch due to mismatch between postgres type and batch type: {:?}", client_error);
+    
+                                    Ok(false)
+                                } else {
+                                    Ok(false)
+                                }
+                            },
+                            None => {
+                                log::error!("postgres without cause: ${err:?}", err = postgres_error);
+    
+                                Ok(false)
+                            },
+                        }
+                    },
+                }
+            },
+            SinkError::MissingColumn(what_column) => {
+                log::info!("adding missing column {:?}", what_column);
+                self.client.batch_execute(
+                    &format!(
+                        "alter table {t} add column {c} {dt}",
+                        t=what_column.table,
+                        c=what_column.column,
+                        dt=what_column.data_type
+                    )
+                ).await?;
 
-                            Ok(false)
-                        },
-                    }
-                },
-            }
-        },
-        SinkError::DescribedError(e) => todo!(),
+                Ok(true)
+            },
+            SinkError::MissingTable(_) => todo!(),
+            SinkError::DescribedError(e) => todo!(),
+        }
     }
 }
 
@@ -271,5 +363,13 @@ fn sql_data_type_string(measurement: &Measurement) -> &'static str {
         measurement::Value::Gauge(_) => "double precision",
         measurement::Value::StatisticSet(_) => "statistic_set",
         measurement::Value::Histogram(_) => "histogram",
+    }
+}
+
+fn sql_dimension_type_string(dimension: &Dimension) -> &'static str {
+    match dimension.value.as_ref().unwrap() {
+        dimension::Value::String(_) => "text",
+        dimension::Value::Number(_) => "biginteger",
+        dimension::Value::Boolean(_) => "boolean",
     }
 }

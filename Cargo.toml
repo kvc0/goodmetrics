@@ -23,6 +23,7 @@ num_cpus = {version = "1.13.0"}
 
 tokio-postgres = {version = "0.7.5"}
 postgres-types = {version = "0.2.2", features = ["derive"] }
+bytes = {version = "1.1.0" }
 
 serde = {version = "1.0", features = ["derive"]}
 serde_derive = {version = "1.0"}
@@ -38,7 +39,6 @@ log = { version = "^0.4.14" }
 
 itertools = { version = "0.10.3" }
 regex = { version = "1.5.4" }
-cached = { version = "0.28.0" }
 thiserror = { version = "1.0" }
 futures = { version = "0.3.19" }
 

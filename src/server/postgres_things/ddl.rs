@@ -6,7 +6,7 @@ lazy_static! {
     static ref NOT_WHITESPACE: Regex = Regex::new(r"[^\w]+").unwrap();
 }
 
-pub async fn add_column(client: &Client, table_name: &String, column_name: &String, data_type: &str) -> Result<(), tokio_postgres::Error> {
+pub async fn add_column(client: &Client, table_name: &str, column_name: &str, data_type: &str) -> Result<(), tokio_postgres::Error> {
     client.batch_execute(
     &format!(
             "alter table {table} add column {column} {data_type}",
