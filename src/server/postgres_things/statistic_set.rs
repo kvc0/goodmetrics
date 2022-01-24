@@ -1,25 +1,35 @@
 use postgres_types::Type;
 use tokio_postgres::{error::SqlState, Transaction};
 
-pub async fn get_or_create_statistic_set_type(transaction: &Transaction<'_>) -> Result<Type, tokio_postgres::Error> {
-    match get_statistic_set_type(transaction).await {
+use crate::sink::postgres_sink::SinkError;
+
+use super::postgres_connector::PostgresConnector;
+
+pub async fn get_or_create_statistic_set_type(connector: &mut PostgresConnector) -> Result<Type, SinkError> {
+    let transaction = connector.use_connection().await?;
+    match get_statistic_set_type(&transaction).await {
         Ok(def) => Ok(def),
         Err(e) => {
             if let Some(dbe) = e.as_db_error() {
                 match dbe.code() {
                     &SqlState::UNDEFINED_OBJECT => {
                         log::info!("Probably missing statistic_set type. Going to try to make it: {:?}", dbe);
+                        drop(transaction);
 
-                        Ok(create_statistic_set_type(transaction).await?)
+                        let transaction = connector.use_connection().await?;
+                        let t = create_statistic_set_type(&transaction).await?;
+                        transaction.commit().await?;
+
+                        Ok(t)
                     }
                     _ => {
                         log::info!("Can't find the statistic_set type, so I can't run: {:?}", dbe);
 
-                        Err(e)
+                        Err(SinkError::Postgres(e))
                     }
                 }
             } else {
-                Err(e)
+                Err(SinkError::Postgres(e))
             }
         }
     }

@@ -6,7 +6,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use thiserror::Error;
 use tokio_postgres::{types::{Type, ToSql, WrongType}, binary_copy::BinaryCopyInWriter, error::SqlState, CopyInSink};
-use crate::{proto::metrics::pb::{Datum, dimension, measurement, Dimension, Measurement}, postgres_things::{statistic_set::get_or_create_statistic_set_type, ddl::{clean_id, self}, type_conversion::TypeConverter, postgres_connector::PostgresConnector}};
+use crate::{proto::metrics::pb::{Datum, dimension, measurement, Dimension, Measurement}, postgres_things::{statistic_set::get_or_create_statistic_set_type, ddl::{clean_id, self}, type_conversion::TypeConverter, postgres_connector::PostgresConnector, histogram::get_or_create_histogram_type}};
 
 use super::metricssendqueue::MetricsReceiveQueue;
 
@@ -84,15 +84,14 @@ pub struct PostgresSender {
 impl PostgresSender {
     pub async fn new_connection(connection_string: &String, rx: MetricsReceiveQueue) -> Result<PostgresSender, SinkError> {
         log::debug!("new_connection: {:?}", connection_string);
-        let mut 
-        connector = PostgresConnector::new(connection_string.clone()).await?;
+        let mut connector = PostgresConnector::new(connection_string.clone()).await?;
 
         let type_converter = {
-            let transaction = connector.use_connection().await?;
-            let statistic_set_type = get_or_create_statistic_set_type(&transaction).await?;
+            let statistic_set_type = get_or_create_statistic_set_type(&mut connector).await?;
+            let histogram_type = get_or_create_histogram_type(&mut connector).await?;
             TypeConverter {
-                statistic_set_type: statistic_set_type,
-                histogram_type: Type::RECORD, // TODO do the histogram type
+                statistic_set_type,
+                histogram_type,
             }
         };
 
