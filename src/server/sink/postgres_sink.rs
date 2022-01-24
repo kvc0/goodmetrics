@@ -316,7 +316,7 @@ async fn write_and_close(writer: BinaryCopyInWriter, dimensions: &BTreeMap<Strin
                         measurement::Value::Gauge(g) => Box::new(g),
                         // measurement::Value::StatisticSet(s) => Box::new((s.minimum, s.maximum, s.samplesum, s.samplecount)),
                         measurement::Value::StatisticSet(s) => Box::new(s),
-                        measurement::Value::Histogram(_h) => todo!(),
+                        measurement::Value::Histogram(h) => Box::new(h.to_stupidmap()),
                     }
                 )
             } else {

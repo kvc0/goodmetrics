@@ -1,7 +1,10 @@
+use std::collections::HashMap;
+
 use postgres_types::Type;
+use serde_json::json;
 use tokio_postgres::{error::SqlState, Transaction};
 
-use crate::sink::postgres_sink::SinkError;
+use crate::{sink::postgres_sink::SinkError, proto::metrics::pb::Histogram};
 
 use super::postgres_connector::PostgresConnector;
 
@@ -45,6 +48,15 @@ async fn get_histogram_type(transaction: &Transaction<'_>) -> Result<Type, tokio
         Err(e) => {
             Err(e)
         }
+    }
+}
+
+impl Histogram {
+    pub fn to_stupidmap(&self) -> serde_json::Value {
+        let a: HashMap<String, i64> = self.buckets.iter().map(|(k, v)| {
+            (k.to_string(), *v)
+        }).collect();
+        json!(a)
     }
 }
 

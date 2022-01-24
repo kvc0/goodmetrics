@@ -53,10 +53,5 @@ message StatisticSet {
 }
 
 message Histogram {
-    repeated Bucket buckets = 1;
-}
-
-message Bucket {
-    int64 threshold = 1;
-    int64 count = 2;
+    map<int64, int64> buckets = 1;
 }

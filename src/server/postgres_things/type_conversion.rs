@@ -15,9 +15,8 @@ impl TypeConverter {
             Some(v) => {
                 Some(match v {
                     measurement::Value::Gauge(_) => Type::FLOAT8,
-                    // Composite type thing
                     measurement::Value::StatisticSet(_) => self.statistic_set_type.clone(),
-                    measurement::Value::Histogram(_) => Type::RECORD,
+                    measurement::Value::Histogram(_) => Type::JSONB,
                 })
             },
             None => None,
