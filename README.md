@@ -2,6 +2,18 @@
 
 Not perfect, but it's good.
 
+# Data model
+
+| Column                    | type          | about  |
+| :-----:                   | :--:          | ---    |
+| `time`                    | timestamptz   | The 1 required column, used as the time column for hypertables. It is provided by Good Metrics |
+| int_dimension             | int8/bigint   | A 64 bit integer |
+| str_dimension             | text          | A label |
+| bool_dimension            | boolean       | A flag |
+| gauge_measurement         | float8        | Snapshot of a value |
+| statistic_set_measurement | statistic_set | A preaggregated {min,max,sum,count} rollup of some value. Has convenience functions for graphing and rollups. |
+| histogram_measurement     | histogram     | Implemented as jsonb. Has convenience functions for graphing and rollups. |
+
 # Philosophy
 ## Good?
 The data model is not bad, like combinatorial metrics engines (think
