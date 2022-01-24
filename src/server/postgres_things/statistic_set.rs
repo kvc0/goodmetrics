@@ -1,8 +1,8 @@
 use postgres_types::Type;
-use tokio_postgres::{Client, error::SqlState};
+use tokio_postgres::{error::SqlState, Transaction};
 
-pub async fn get_or_create_statistic_set_type(client: &Client) -> Result<Type, tokio_postgres::Error> {
-    match get_statistic_set_type(client).await {
+pub async fn get_or_create_statistic_set_type(transaction: &Transaction<'_>) -> Result<Type, tokio_postgres::Error> {
+    match get_statistic_set_type(transaction).await {
         Ok(def) => Ok(def),
         Err(e) => {
             if let Some(dbe) = e.as_db_error() {
@@ -10,7 +10,7 @@ pub async fn get_or_create_statistic_set_type(client: &Client) -> Result<Type, t
                     &SqlState::UNDEFINED_OBJECT => {
                         log::info!("Probably missing statistic_set type. Going to try to make it: {:?}", dbe);
 
-                        Ok(create_statistic_set_type(client).await?)
+                        Ok(create_statistic_set_type(transaction).await?)
                     }
                     _ => {
                         log::info!("Can't find the statistic_set type, so I can't run: {:?}", dbe);
@@ -25,8 +25,8 @@ pub async fn get_or_create_statistic_set_type(client: &Client) -> Result<Type, t
     }
 }
 
-async fn get_statistic_set_type(client: &Client) -> Result<Type, tokio_postgres::Error> {
-    match client.prepare("SELECT $1::statistic_set").await {
+async fn get_statistic_set_type(transaction: &Transaction<'_>) -> Result<Type, tokio_postgres::Error> {
+    match transaction.prepare("SELECT $1::statistic_set").await {
         Ok(statement) => {
             let statistic_set_type = statement.params()[0].clone();
 
@@ -36,14 +36,14 @@ async fn get_statistic_set_type(client: &Client) -> Result<Type, tokio_postgres:
     }
 }
 
-async fn create_statistic_set_type(client: &Client) -> Result<Type, tokio_postgres::Error> {
-    match client.batch_execute(r#"
+async fn create_statistic_set_type(transaction: &Transaction<'_>) -> Result<Type, tokio_postgres::Error> {
+    match transaction.batch_execute(r#"
 -- Here is a data type I find highly useful when recording high frequency events:
 CREATE TYPE statistic_set AS (
   minimum     double precision,
   maximum     double precision,
   samplesum   double precision,
-  samplecount biginteger
+  samplecount int8
 );
 
 --------------------- statistic_set support functions ---------------------
@@ -189,7 +189,7 @@ CREATE AGGREGATE accumulate(double precision)
 );
     "#).await {
         Ok(_modified) => {
-            Ok(get_statistic_set_type(client).await?)
+            Ok(get_statistic_set_type(transaction).await?)
         }
         Err(e) => Err(e)
     }

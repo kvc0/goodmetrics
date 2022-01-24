@@ -1,20 +1,14 @@
 use std::{collections::BTreeMap, error::Error, fmt::Display, time::{SystemTime, Duration}};
 
-use futures::pin_mut;
+use futures::{pin_mut, Future};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use regex::Regex;
 use thiserror::Error;
-use tokio_postgres::{NoTls, tls::NoTlsStream, Socket, Connection, types::{Type, ToSql, WrongType}, binary_copy::BinaryCopyInWriter, error::SqlState, CopyInSink};
-use crate::{proto::metrics::pb::{Datum, dimension, measurement, Dimension, Measurement}, postgres_things::{statistic_set::get_or_create_statistic_set_type, ddl::{clean_id, add_column}, type_conversion::TypeConverter}};
+use tokio_postgres::{NoTls, tls::NoTlsStream, Socket, Connection, types::{Type, ToSql, WrongType}, binary_copy::BinaryCopyInWriter, error::SqlState, CopyInSink, Client, Transaction};
+use crate::{proto::metrics::pb::{Datum, dimension, measurement, Dimension, Measurement}, postgres_things::{statistic_set::get_or_create_statistic_set_type, ddl::{clean_id, add_column}, type_conversion::TypeConverter, postgres_connector::PostgresConnector}};
 
 use super::metricssendqueue::MetricsReceiveQueue;
-
-pub struct PostgresSender {
-    pub client: tokio_postgres::Client,
-    rx: MetricsReceiveQueue,
-    type_converter: TypeConverter,
-}
 
 #[derive(Debug, Error)]
 pub struct DescribedError {
@@ -82,41 +76,32 @@ lazy_static! {
     static ref UNDEFINED_COLUMN: Regex = Regex::new(r#"column "(?P<column>.+)" of relation "(?P<table>.+)" does not exist"#).unwrap();
 }
 
+pub struct PostgresSender {
+    connector: PostgresConnector,
+    rx: MetricsReceiveQueue,
+    type_converter: TypeConverter,
+}
+
 impl PostgresSender {
     pub async fn new_connection(connection_string: &String, rx: MetricsReceiveQueue) -> Result<PostgresSender, SinkError> {
         log::debug!("new_connection: {:?}", connection_string);
-        let connection_future = tokio_postgres::connect(&connection_string, NoTls);
-        match connection_future.await {
-            Ok(connection_pair) => {
-                let (client, connection) = connection_pair;
-                tokio::spawn(async move {
-                    PostgresSender::run_connection(connection).await
-                });
+        let mut 
+        connector = PostgresConnector::new(connection_string.clone()).await?;
 
-                let statistic_set_type = get_or_create_statistic_set_type(&client).await?;
-                let converter = TypeConverter {
-                    statistic_set_type: statistic_set_type,
-                    histogram_type: Type::RECORD, // TODO do the histogram type
-                };
+        let type_converter = {
+            let transaction = connector.use_connection().await?;
+            let statistic_set_type = get_or_create_statistic_set_type(&transaction).await?;
+            TypeConverter {
+                statistic_set_type: statistic_set_type,
+                histogram_type: Type::RECORD, // TODO do the histogram type
+            }
+        };
 
-                Ok(PostgresSender {
-                    client,
-                    rx,
-                    type_converter: converter,
-                })
-            },
-            Err(err) => {
-                Err(SinkError::DescribedError(DescribedError { message: "could not connect".to_string(), inner: err }))
-            },
-        }
-    }
-
-    async fn run_connection(connection: Connection<Socket, NoTlsStream>) {
-        log::info!("spawning connection routine");
-        match connection.await {
-            Ok(_) => log::info!("connection routine ended"),
-            Err(e) => log::info!("connection routine errored: {:?}", e),
-        }
+        Ok(PostgresSender {
+            connector,
+            rx,
+            type_converter,
+        })
     }
 
     pub async fn consume_stuff(&mut self) -> Result<u32, SinkError> {
@@ -152,8 +137,7 @@ impl PostgresSender {
     }
 
     async fn run_a_batch(&mut self, grouped_metrics: &BTreeMap<&String, Vec<&Datum>>) -> Result<usize, SinkError> {
-        let client = &mut self.client;
-        let transaction = client.transaction().await?;
+        let transaction = self.connector.use_connection().await?;
 
         let mut rows = 0;
         for (metric, datums) in grouped_metrics.iter() {
@@ -228,7 +212,7 @@ impl PostgresSender {
         Ok(rows)
     }
 
-    async fn handle_error_and_should_it_retry(&self, e: SinkError) -> Result<bool, SinkError> {
+    async fn handle_error_and_should_it_retry(&mut self, e: SinkError) -> Result<bool, SinkError> {
         return match e {
             SinkError::Postgres(postgres_error) => {
                 match postgres_error.as_db_error() {
@@ -268,7 +252,8 @@ impl PostgresSender {
             },
             SinkError::MissingColumn(what_column) => {
                 log::info!("adding missing column {:?}", what_column);
-                self.client.batch_execute(
+                let transaction = self.connector.use_connection().await?;
+                transaction.batch_execute(
                     &format!(
                         "alter table {t} add column {c} {dt}",
                         t=what_column.table,
@@ -276,6 +261,7 @@ impl PostgresSender {
                         dt=what_column.data_type
                     )
                 ).await?;
+                transaction.commit().await?;
 
                 Ok(true)
             },
@@ -369,7 +355,7 @@ fn sql_data_type_string(measurement: &Measurement) -> &'static str {
 fn sql_dimension_type_string(dimension: &Dimension) -> &'static str {
     match dimension.value.as_ref().unwrap() {
         dimension::Value::String(_) => "text",
-        dimension::Value::Number(_) => "biginteger",
+        dimension::Value::Number(_) => "int8",
         dimension::Value::Boolean(_) => "boolean",
     }
 }
