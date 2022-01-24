@@ -26,6 +26,19 @@ impl Display for DescribedError {
 }
 
 #[derive(Debug, Error)]
+pub struct MissingTable {
+    pub table: String,
+}
+
+impl Display for MissingTable {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fmt.debug_struct("MissingTable")
+            .field("table", &self.table)
+            .finish()
+    }
+}
+
+#[derive(Debug, Error)]
 pub struct MissingColumn {
     pub table: String,
     pub column: String,
@@ -34,24 +47,9 @@ pub struct MissingColumn {
 
 impl Display for MissingColumn {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fmt.debug_struct("DescribedError")
+        fmt.debug_struct("MissingColumn")
             .field("table", &self.table)
             .field("column", &self.column)
-            .finish()
-    }
-}
-
-#[derive(Debug, Error)]
-pub struct MissingTable {
-    pub table: String,
-    pub datum: Datum,
-}
-
-impl Display for MissingTable {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fmt.debug_struct("DescribedError")
-            .field("table", &self.table)
-            .field("datum", &self.datum)
             .finish()
     }
 }
@@ -74,6 +72,7 @@ pub enum SinkError {
 lazy_static! {
     // column "available_messages" of relation "table_name" does not exist
     static ref UNDEFINED_COLUMN: Regex = Regex::new(r#"column "(?P<column>.+)" of relation "(?P<table>.+)" does not exist"#).unwrap();
+    static ref UNDEFINED_TABLE: Regex = Regex::new(r#"relation "(?P<table>.+)" does not exist"#).unwrap();
 }
 
 pub struct PostgresSender {
@@ -193,6 +192,15 @@ impl PostgresSender {
                                         },
                                     }
                                 },
+                                &SqlState::UNDEFINED_TABLE => {
+                                    let table_capture = UNDEFINED_TABLE.captures(dberror.message()).unwrap();
+                                    let table = table_capture.name("table").unwrap().as_str();
+                                    log::info!("missing table: {table}", table = table);
+
+                                    return Err(SinkError::MissingTable( MissingTable {
+                                        table: table.to_string(),
+                                    } ))
+                                },
                                 _ => {
                                     return Err(SinkError::Postgres(postgres_error));
                                 },
@@ -263,7 +271,17 @@ impl PostgresSender {
 
                 Ok(true)
             },
-            SinkError::MissingTable(_) => todo!(),
+            SinkError::MissingTable(what_table) => {
+                log::info!("adding missing table {:?}", what_table);
+                let transaction = self.connector.use_connection().await?;
+                ddl::create_table(
+                    &transaction,
+                    &what_table.table
+                ).await?;
+                transaction.commit().await?;
+
+                Ok(true)
+            },
             SinkError::DescribedError(_e) => todo!(),
         }
     }

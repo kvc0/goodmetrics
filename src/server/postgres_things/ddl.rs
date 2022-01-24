@@ -17,6 +17,18 @@ pub async fn add_column(transaction: &Transaction<'_>, table_name: &str, column_
     ).await
 }
 
+pub async fn create_table(transaction: &Transaction<'_>, table_name: &str) -> Result<(), tokio_postgres::Error> {
+    transaction.batch_execute(
+    &format!(
+            r#"create table {table} (time timestamptz);
+            select * from create_hypertable('{table}', 'time', chunk_time_interval => interval '{chunk}' );
+            "#,
+            table=table_name,
+            chunk="4h"
+        )
+    ).await
+}
+
 pub fn clean_id(s: &String) -> String {
     let l = s.to_lowercase();
     let a = NOT_WHITESPACE.replace_all(&l, "_");
