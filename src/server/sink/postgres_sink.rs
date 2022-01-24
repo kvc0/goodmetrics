@@ -1,12 +1,12 @@
 use std::{collections::BTreeMap, error::Error, fmt::Display, time::{SystemTime, Duration}};
 
-use futures::{pin_mut, Future};
+use futures::pin_mut;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use regex::Regex;
 use thiserror::Error;
-use tokio_postgres::{NoTls, tls::NoTlsStream, Socket, Connection, types::{Type, ToSql, WrongType}, binary_copy::BinaryCopyInWriter, error::SqlState, CopyInSink, Client, Transaction};
-use crate::{proto::metrics::pb::{Datum, dimension, measurement, Dimension, Measurement}, postgres_things::{statistic_set::get_or_create_statistic_set_type, ddl::{clean_id, add_column}, type_conversion::TypeConverter, postgres_connector::PostgresConnector}};
+use tokio_postgres::{types::{Type, ToSql, WrongType}, binary_copy::BinaryCopyInWriter, error::SqlState, CopyInSink};
+use crate::{proto::metrics::pb::{Datum, dimension, measurement, Dimension, Measurement}, postgres_things::{statistic_set::get_or_create_statistic_set_type, ddl::{clean_id, self}, type_conversion::TypeConverter, postgres_connector::PostgresConnector}};
 
 use super::metricssendqueue::MetricsReceiveQueue;
 
@@ -253,20 +253,18 @@ impl PostgresSender {
             SinkError::MissingColumn(what_column) => {
                 log::info!("adding missing column {:?}", what_column);
                 let transaction = self.connector.use_connection().await?;
-                transaction.batch_execute(
-                    &format!(
-                        "alter table {t} add column {c} {dt}",
-                        t=what_column.table,
-                        c=what_column.column,
-                        dt=what_column.data_type
-                    )
+                ddl::add_column(
+                    &transaction,
+                    &what_column.table,
+                    &what_column.column,
+                    &what_column.data_type
                 ).await?;
                 transaction.commit().await?;
 
                 Ok(true)
             },
             SinkError::MissingTable(_) => todo!(),
-            SinkError::DescribedError(e) => todo!(),
+            SinkError::DescribedError(_e) => todo!(),
         }
     }
 }
@@ -301,7 +299,7 @@ async fn write_and_close(writer: BinaryCopyInWriter, dimensions: &BTreeMap<Strin
                         measurement::Value::Gauge(g) => Box::new(g),
                         // measurement::Value::StatisticSet(s) => Box::new((s.minimum, s.maximum, s.samplesum, s.samplecount)),
                         measurement::Value::StatisticSet(s) => Box::new(s),
-                        measurement::Value::Histogram(h) => todo!(),
+                        measurement::Value::Histogram(_h) => todo!(),
                     }
                 )
             } else {

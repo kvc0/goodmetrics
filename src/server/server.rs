@@ -98,7 +98,10 @@ async fn run_server(args: config::options::Options) {
         handlers.push(h);
     }
 
-    join!(bg_task);
+    match join!(bg_task){
+        (Ok(_),) => log::info!("joined background task"),
+        (Err(e),) => log::error!("joined background task with error: {:?}", e),
+    };
 
     for h in handlers {
         h.join().unwrap();

@@ -21,6 +21,7 @@ impl MetricsSink for MetricsSendQueue {
                 Ok("collected".to_string())
             },
             Err(e) => {
+                log::warn!("queue error: {:?}", e);
                 Err(ErrorCode::QueueFull)
             },
         }
@@ -29,7 +30,7 @@ impl MetricsSink for MetricsSendQueue {
 
 impl MetricsSendQueue {
     pub fn new() -> (MetricsSendQueue, MetricsReceiveQueue) {
-        let (mut tx, mut rx) = mpsc::channel(100);
+        let (tx, rx) = mpsc::channel(100);
 
         (MetricsSendQueue {tx}, MetricsReceiveQueue {rx})
     }
