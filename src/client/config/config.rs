@@ -26,7 +26,7 @@ fn default_dir() -> String {
 #[structopt(about = "Good metrics CLI client")]
 pub(crate) struct Options {
     #[structopt(long, default_value = &DEFAULT_DIR)] pub config_file: String,
-    #[structopt(long, default_value = "http://127.0.0.1:9573")] pub goodmetrics_server: String,
+    #[structopt(long, default_value = "https://localhost:9573")] pub goodmetrics_server: String,
     #[structopt(long, default_value = "debug")] pub log_level: String,
 
     #[structopt(subcommand)]

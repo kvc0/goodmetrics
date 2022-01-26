@@ -1,7 +1,7 @@
 use config::options::get_args;
 use servers::goodmetrics::GoodMetricsServer;
 use sink::{metricssendqueue::MetricsSendQueue, postgres_sink::PostgresSender};
-use tonic::transport::Server;
+use tonic::transport::{Server, ServerTlsConfig, Identity};
 
 use std::{net::SocketAddr, cmp::min, sync::Arc};
 use tokio::{net::TcpListener, join};
@@ -14,7 +14,7 @@ mod postgres_things;
 mod proto;
 use proto::metrics::pb::metrics_server::MetricsServer;
 
-async fn serve(args: Arc<config::options::Options>, send_queue: MetricsSendQueue) {
+async fn serve(args: Arc<config::options::Options>, send_queue: MetricsSendQueue) -> Result<(), Box<dyn std::error::Error>> {
     let address: std::net::SocketAddr = args.listen_socket_address.parse().unwrap();
     let socket = socket2::Socket::new(
         match address {
@@ -39,12 +39,35 @@ async fn serve(args: Arc<config::options::Options>, send_queue: MetricsSendQueue
         metrics_sink: send_queue,
     };
 
+    let identity = get_identity(&args).await?;
+
     let grpc_server = MetricsServer::new(one_server_thread);
     Server::builder()
+        .tls_config(ServerTlsConfig::new().identity(identity))?
         .add_service(grpc_server)
         .serve_with_incoming(incoming)
         .await
         .unwrap();
+
+    Ok(())
+}
+
+async fn get_identity(options: &config::options::Options) -> Result<Identity, Box<dyn std::error::Error>> {
+    let identity = if !options.cert.is_empty() && !options.cert_private_key.is_empty() {
+        let cert = tokio::fs::read("examples/data/tls/server.pem").await?;
+        let key = tokio::fs::read("examples/data/tls/server.key").await?;
+
+        Identity::from_pem(cert, key)
+    } else {
+        let subject_alt_names = vec![options.self_signed_hostname.clone()];
+        let cert = rcgen::generate_simple_self_signed(subject_alt_names).unwrap();
+        let certpem = cert.serialize_pem().unwrap();
+        let pkpem = cert.serialize_private_key_pem();
+
+        Identity::from_pem(certpem, pkpem)
+    };
+
+    Ok(identity)
 }
 
 fn main() {
@@ -93,7 +116,8 @@ async fn run_server(args: config::options::Options) {
                 .enable_all()
                 .build()
                 .unwrap()
-                .block_on(serve(threadlocal_args, thread_send_queue));
+                .block_on(serve(threadlocal_args, thread_send_queue))
+                .unwrap();
         });
         handlers.push(h);
     }

@@ -10,6 +10,13 @@ pub(crate) struct Options {
     #[structopt(long, default_value = "1")] pub max_threads: usize,
     #[structopt(long, default_value = "debug")] pub log_level: String,
 
+    // File path to the private key.
+    #[structopt(long, default_value = "")] pub cert_private_key: String,
+    // File path to the private key's public certificate.
+    #[structopt(long, default_value = "")] pub cert: String,
+    // hostname to use for a self-signed host
+    #[structopt(long, default_value = "localhost")] pub self_signed_hostname: String,
+
     #[structopt(long, default_value = "host=localhost port=2345 user=metrics password=metrics connect_timeout=10")] pub connection_string: String,
 }
 

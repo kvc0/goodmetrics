@@ -1,7 +1,9 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use config::config::{get_args, Subcommand};
-use metrics::MetricsRequest;
+use metrics::{MetricsRequest, metrics_client::MetricsClient};
+use rustls::{ClientConfig, ServerCertVerifier};
+use tonic::transport::Channel;
 
 pub mod metrics {
     tonic::include_proto!("goodmetrics");
@@ -14,7 +16,7 @@ async fn main() {
 
     env_logger::Builder::from_env(
         env_logger::Env::default()
-            .default_filter_or(args.log_level)
+            .default_filter_or(&args.log_level)
             .default_write_style_or("always"),
     )
     .init();
@@ -26,7 +28,8 @@ async fn main() {
             for metric in &metrics {
                 log::info!("parsed: {}", serde_json::to_string_pretty(&metric).unwrap());
             }
-            let mut client = match metrics::metrics_client::MetricsClient::connect("http://localhost:9573").await {
+
+            let mut client = match get_client(&args.goodmetrics_server).await {
                 Ok(c) => {
                     log::debug!("connected: {:?}", c);
                     c
@@ -50,5 +53,39 @@ async fn main() {
                 },
             }
         },
+    }
+}
+
+async fn get_client(endpoint: &str) -> Result<MetricsClient<Channel>, Box<dyn std::error::Error>> {
+    // FIXME: set up optional no-issuer-validation. Can keep
+    //        hostname validation I think though?
+    let mut config = ClientConfig::new();
+    config.dangerous().set_certificate_verifier(Arc::new(StupidVerifier {}));
+    config.alpn_protocols = vec![ "h2".to_string().as_bytes().to_vec() ];
+
+    let tls = tonic::transport::ClientTlsConfig::new()
+        .rustls_client_config(config);
+
+    let channel = Channel::from_shared(endpoint.to_string())?
+        .tls_config(tls)?
+        .connect()
+        .await?;
+    let client = MetricsClient::new(channel);
+
+    Ok(client)
+}
+
+struct StupidVerifier {}
+
+impl ServerCertVerifier for StupidVerifier {
+    fn verify_server_cert(
+        &self,
+        _roots: &rustls::RootCertStore,
+        _presented_certs: &[rustls::Certificate],
+        _dns_name: webpki::DNSNameRef,
+        _ocsp_response: &[u8],
+    ) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
+        // roflmao
+        Ok(rustls::ServerCertVerified::assertion())
     }
 }
