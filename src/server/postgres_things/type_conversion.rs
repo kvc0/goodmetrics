@@ -14,7 +14,8 @@ impl TypeConverter {
         match measurement.value.as_ref() {
             Some(v) => {
                 Some(match v {
-                    measurement::Value::Gauge(_) => Type::FLOAT8,
+                    measurement::Value::Inumber(_) => Type::INT8,
+                    measurement::Value::Fnumber(_) => Type::FLOAT8,
                     measurement::Value::StatisticSet(_) => self.statistic_set_type.clone(),
                     measurement::Value::Histogram(_) => Type::JSONB,
                 })

@@ -313,7 +313,8 @@ async fn write_and_close(writer: BinaryCopyInWriter, dimensions: &BTreeMap<Strin
             if let Some(value) = measurement.value.as_ref() {
                 row.push(
                     match value {
-                        measurement::Value::Gauge(g) => Box::new(g),
+                        measurement::Value::Inumber(i) => Box::new(i),
+                        measurement::Value::Fnumber(f) => Box::new(f),
                         // measurement::Value::StatisticSet(s) => Box::new((s.minimum, s.maximum, s.samplesum, s.samplecount)),
                         measurement::Value::StatisticSet(s) => Box::new(s),
                         measurement::Value::Histogram(h) => Box::new(h.to_stupidmap()),
@@ -361,7 +362,8 @@ fn group_metrics<'a>(batch: &'a Vec<Datum>) -> BTreeMap<&'a String, Vec<&Datum>>
 
 fn sql_data_type_string(measurement: &Measurement) -> &'static str {
     match measurement.value.as_ref().unwrap() {
-        measurement::Value::Gauge(_) => "double precision",
+        measurement::Value::Inumber(_) => "int8",
+        measurement::Value::Fnumber(_) => "float8",
         measurement::Value::StatisticSet(_) => "statistic_set",
         measurement::Value::Histogram(_) => "histogram",
     }

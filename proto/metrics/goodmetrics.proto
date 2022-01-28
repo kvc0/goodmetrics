@@ -39,9 +39,10 @@ message Dimension {
 
 message Measurement {
     oneof value {
-        double gauge = 1;
-        StatisticSet statistic_set = 2;
-        Histogram histogram = 3;
+        int64 inumber = 1;
+        double fnumber = 2;
+        StatisticSet statistic_set = 3;
+        Histogram histogram = 4;
     }
 }
 
