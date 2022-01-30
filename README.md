@@ -37,10 +37,9 @@ unintentional value.
 Consider 50 servers, 30 apis (or web pages), 80k users, a geo location
 (let's say 15/user), a logged-in/anonymous bit, and 12 measurements per
 api. In naive systems, this is modeled as over **40 billion** distinct
-series. That will cost you **over $850 million dollars** per month from
-CloudWatch with their public pricing (hell, if you negotiate a 99%
-discount it's still **$8.6m**). Also, it doesn't work on influx or
-prometheus. They just fall over.
+series unless you de-relate your data. Go ahead and check the cost of
+that cardinality in cloudwatch! You'll have a rough time with any time
+series storage engine that stores series this way.
 
 Instead, if you model these interactions as Good Metrics, you'll have
 1 bag of measurements and dimensions per api/web page load. That's
