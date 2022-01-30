@@ -42,11 +42,9 @@ that cardinality in cloudwatch! You'll have a rough time with any time
 series storage engine that stores series this way.
 
 Instead, if you model these interactions as Good Metrics, you'll have
-1 bag of measurements and dimensions per api/web page load. That's
-`servers * units of work` rows per interval. So if you were rollig up
-to 1 second per api/page, you'd have 1500 rows per second; each carrying
-5 dimension columns and 12 measurement columns. This is hardly breaking
-a sweat for a single moderately sized ec2 instance or Timescale forge/cloud.
+1 bag of measurements and dimensions per api/web page load. You can also
+pre-aggregate the data if you've got some high frequency stuff to record.
+You don't have to but it's an option if you don't want a massive database.
 
 Not only that, your data remains related. You can pivot your measurements
 by any dimension or value threshold, because you are standing on the shoulders
