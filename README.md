@@ -1,6 +1,7 @@
-# Good Metrics
+# <img src="https://user-images.githubusercontent.com/3454741/151748581-1ad6c34c-f583-4813-b878-d19c98ec3427.png" width="108em" align="center"/> Good Metrics
 
-Not perfect, but it's good.
+This is the way (to record metrics)
+
 
 # Data model
 
@@ -15,6 +16,9 @@ Not perfect, but it's good.
 | histogram_measurement     | histogram     | Implemented as jsonb. Has convenience functions for graphing and rollups. |
 
 # Philosophy
+
+Not perfect, but it's good.
+
 ## Good?
 The data model is not bad, like combinatorial metrics engines (think
 Prometheus, Cloudwatch, Influx).
