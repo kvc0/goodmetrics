@@ -15,6 +15,9 @@ This is the way (to record metrics)
 | statistic_set_measurement | statistic_set | A preaggregated {min,max,sum,count} rollup of some value. Has convenience functions for graphing and rollups. |
 | histogram_measurement     | histogram     | Implemented as jsonb. Has convenience functions for graphing and rollups. |
 
+# Clients
+* [Kotlin](https://github.com/WarriorOfWire/goodmetrics_kotlin)
+
 # Philosophy
 
 Not perfect, but it's good.
