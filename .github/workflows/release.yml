@@ -98,14 +98,15 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           path: artifacts/
+      
+      - name: tree
+        run: tree
 
       - name: create release
         uses: softprops/action-gh-release@v1
         with:
           draft: ${{ github.event.inputs.draft }}
           prerelease: ${{ github.event.inputs.prerelease }}
-          release_name: ${{ steps.version.outputs.version }}
+          name: ${{ steps.version.outputs.version }}
           tag_name: ${{ github.ref }}
-          files: |
-            artifacts/linux_x86_64.tar.gz
-            artifacts/osx_x86_64.tar.gz
+          files: artifacts/*
