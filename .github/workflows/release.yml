@@ -1,0 +1,106 @@
+name: Build everything
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version'
+        required: true
+        type: string
+      draft:
+        description: 'Draft release'
+        required: true
+        type: boolean
+      prerelease:
+        description: 'Pre-release'
+        required: true
+        type: boolean
+
+env:
+  CARGO_TERM_COLOR: always
+  cache: 0
+
+jobs:
+  rustfmt:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: install rustfmt
+      run: rustup component add rustfmt
+    - name: rustfmt
+      run: cargo fmt -- --check
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: install clippy
+      run: rustup component add clippy
+    - name: clippy
+      run: cargo clippy --all-targets --all-features -- -D warnings
+  macos:
+    name: macos
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: Swatinem/rust-cache@v1
+      - name: Build
+        run: cargo build --release
+      - name: tar
+        run: |
+          pushd target/debug/
+          tar cvzf osx_x86_64.tar.gz goodmetrics goodmetricsd
+          popd
+          mv target/debug/osx_x86_64.tar.gz ./
+      - name: Upload client artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: osx_x86_64.tar.gz
+  musl:
+    name: musl
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+      - uses: Swatinem/rust-cache@v1
+      - name: install rust musl toolchain
+        run: rustup target add x86_64-unknown-linux-musl
+      - name: update apt
+        run: sudo apt-get update
+      - name: install musl-tools
+        run: sudo apt-get install -y musl-tools
+      - name: build
+        run: cargo build --release --target x86_64-unknown-linux-musl
+      - name: tar
+        run: |
+          pushd target/debug/
+          tar cvzf linux_x86_64.tar.gz goodmetrics goodmetricsd
+          popd
+          mv target/debug/linux_x86_64.tar.gz ./
+      - name: Upload client artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: linux_x86_64.tar.gz
+
+  upload-release:
+    name: upload release
+    runs-on: ubuntu-20.04
+    needs:
+      - musl
+      - osx
+    steps:
+      - uses: actions/checkout@v2
+      - name: download clients
+        id: linux_client
+        uses: actions/download-artifact@v2
+        with:
+          path: artifacts/
+
+      - name: create release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: ${{ github.event.inputs.draft }}
+          prerelease: ${{ github.event.inputs.prerelease }}
+          release_name: ${{ steps.version.outputs.version }}
+          tag_name: ${{ github.ref }}
+          files: |
+            artifacts/linux_x86_64.tar.gz
+            artifacts/osx_x86_64.tar.gz
