@@ -55,7 +55,7 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: osx_x86_64.tar.gz
-          path: ./release/osx_x86_64.tar.gz
+          path: ./osx_x86_64.tar.gz
   musl:
     name: musl
     runs-on: ubuntu-20.04
@@ -81,7 +81,7 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: linux_x86_64.tar.gz
-          path: ./release/linux_x86_64.tar.gz
+          path: ./linux_x86_64.tar.gz
 
   upload-release:
     name: upload release
