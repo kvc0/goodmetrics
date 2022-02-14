@@ -25,9 +25,7 @@ impl PostgresConnector {
         })
     }
 
-    pub async fn use_connection(
-        &'_ mut self,
-    ) -> Result<Transaction<'_>, SinkError> {
+    pub async fn use_connection(&'_ mut self) -> Result<Transaction<'_>, SinkError> {
         // need to get the connection via the method that ensures it's connected
         let client = self.get_connection().await?;
         Ok(client.transaction().await?)
