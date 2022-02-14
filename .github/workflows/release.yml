@@ -109,4 +109,4 @@ jobs:
           prerelease: ${{ github.event.inputs.prerelease }}
           name: ${{ steps.version.outputs.version }}
           tag_name: ${{ github.ref }}
-          files: artifacts/*
+          files: artifacts/*/*
