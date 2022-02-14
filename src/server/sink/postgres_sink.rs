@@ -102,11 +102,11 @@ pub struct PostgresSender {
 
 impl PostgresSender {
     pub async fn new_connection(
-        connection_string: &String,
+        connection_string: &str,
         rx: MetricsReceiveQueue,
     ) -> Result<PostgresSender, SinkError> {
         log::debug!("new_connection: {:?}", connection_string);
-        let mut connector = PostgresConnector::new(connection_string.clone()).await?;
+        let mut connector = PostgresConnector::new(connection_string.to_string()).await?;
 
         let type_converter = {
             let statistic_set_type = get_or_create_statistic_set_type(&mut connector).await?;
@@ -176,8 +176,8 @@ impl PostgresSender {
             {
                 Ok(sink) => sink,
                 Err(postgres_error) => match postgres_error.as_db_error() {
-                    Some(dberror) => match dberror.code() {
-                        &SqlState::UNDEFINED_COLUMN => {
+                    Some(dberror) => match *dberror.code() {
+                        SqlState::UNDEFINED_COLUMN => {
                             let pair = UNDEFINED_COLUMN.captures(dberror.message()).unwrap();
                             let table = pair.name("table").unwrap().as_str();
                             let column = pair.name("column").unwrap().as_str();
@@ -214,7 +214,7 @@ impl PostgresSender {
                                 }
                             }
                         }
-                        &SqlState::UNDEFINED_TABLE => {
+                        SqlState::UNDEFINED_TABLE => {
                             let table_capture =
                                 UNDEFINED_TABLE.captures(dberror.message()).unwrap();
                             let table = table_capture.name("table").unwrap().as_str();
@@ -233,7 +233,7 @@ impl PostgresSender {
             };
 
             let writer = BinaryCopyInWriter::new(sink, &all_column_types);
-            rows += write_and_close(writer, &dimension_types, &measurement_types, &datums).await?;
+            rows += write_and_close(writer, &dimension_types, &measurement_types, datums).await?;
         }
 
         transaction.commit().await?;
@@ -244,8 +244,8 @@ impl PostgresSender {
     async fn handle_error_and_should_it_retry(&mut self, e: SinkError) -> Result<bool, SinkError> {
         return match e {
             SinkError::Postgres(postgres_error) => match postgres_error.as_db_error() {
-                Some(dberror) => match dberror.code() {
-                    &SqlState::INSUFFICIENT_PRIVILEGE => {
+                Some(dberror) => match *dberror.code() {
+                    SqlState::INSUFFICIENT_PRIVILEGE => {
                         log::error!(
                             "Do you need to grant permissions or reset the table's owner? {:?}",
                             dberror
@@ -307,7 +307,7 @@ async fn write_and_close(
     writer: BinaryCopyInWriter,
     dimensions: &BTreeMap<String, Type>,
     measurements: &BTreeMap<String, Type>,
-    data: &Vec<&Datum>,
+    data: &[&Datum],
 ) -> Result<usize, SinkError> {
     pin_mut!(writer);
 
@@ -368,11 +368,11 @@ fn get_all_column_names(
 ) -> Vec<String> {
     let mut all_column_types: Vec<String> = vec!["time".to_string()];
     all_column_types.extend(dimension_types.keys().map(|d| clean_id(d)));
-    all_column_types.extend(measurement_types.keys().map(|m| clean_id(m)));
+    all_column_types.extend(measurement_types.keys().map(|d| clean_id(d)));
     all_column_types
 }
 
-fn group_metrics<'a>(batch: &'a Vec<Datum>) -> BTreeMap<&'a String, Vec<&Datum>> {
+fn group_metrics<'a>(batch: &'a [Datum]) -> BTreeMap<&'a String, Vec<&Datum>> {
     let grouped_metrics: BTreeMap<&String, Vec<&Datum>> = batch
         .iter()
         .sorted_by_key(|d| &d.metric)

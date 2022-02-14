@@ -37,7 +37,7 @@ pub async fn create_table(
     ).await
 }
 
-pub fn clean_id(s: &String) -> String {
+pub fn clean_id(s: &str) -> String {
     let l = s.to_lowercase();
     let a = NOT_WHITESPACE.replace_all(&l, "_");
     a.to_string()

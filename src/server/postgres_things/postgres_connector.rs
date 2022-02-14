@@ -25,15 +25,15 @@ impl PostgresConnector {
         })
     }
 
-    pub async fn use_connection<'connection_use>(
-        &'connection_use mut self,
-    ) -> Result<Transaction<'connection_use>, SinkError> {
+    pub async fn use_connection(
+        &'_ mut self,
+    ) -> Result<Transaction<'_>, SinkError> {
         // need to get the connection via the method that ensures it's connected
         let client = self.get_connection().await?;
         Ok(client.transaction().await?)
     }
 
-    async fn get_connection<'a>(&'a mut self) -> Result<&'a mut Client, SinkError> {
+    async fn get_connection(&'_ mut self) -> Result<&'_ mut Client, SinkError> {
         match self
             .connection_is_alive
             .load(std::sync::atomic::Ordering::Relaxed)

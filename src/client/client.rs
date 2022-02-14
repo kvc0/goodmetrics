@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use config::config::{get_args, Subcommand};
+use config::cli_config::{get_args, Subcommand};
 use metrics::{metrics_client::MetricsClient, MetricsRequest};
 use rustls::{ClientConfig, ServerCertVerifier};
 use tonic::transport::Channel;
@@ -43,7 +43,7 @@ async fn main() {
             let result = client
                 .send_metrics(MetricsRequest {
                     shared_dimensions: HashMap::new(),
-                    metrics: metrics,
+                    metrics,
                 })
                 .await;
             match result {

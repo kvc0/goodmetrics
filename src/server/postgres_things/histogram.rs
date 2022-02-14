@@ -16,8 +16,8 @@ pub async fn get_or_create_histogram_type(
         Ok(def) => Ok(def),
         Err(e) => {
             if let Some(dbe) = e.as_db_error() {
-                match dbe.code() {
-                    &SqlState::UNDEFINED_OBJECT => {
+                match *dbe.code() {
+                    SqlState::UNDEFINED_OBJECT => {
                         log::info!(
                             "Probably missing histogram type. Going to try to make it: {:?}",
                             dbe
