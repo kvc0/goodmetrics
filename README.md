@@ -16,7 +16,7 @@ This is the way (to record metrics)
 | histogram_measurement     | histogram     | Implemented as jsonb. Has convenience functions for graphing and rollups. |
 
 # Overview
-![general overview of deployment shape](https://user-images.githubusercontent.com/3454741/153928673-41cf5938-d45b-4bd9-a9f4-6ffd97a552e5.png)
+![general overview of deployment shape](https://user-images.githubusercontent.com/3454741/153928842-44b5eb0e-74b1-4e48-9f49-0db1d0490e57.svg)
 
 
 # Clients
