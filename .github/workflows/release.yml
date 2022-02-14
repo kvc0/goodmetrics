@@ -1,4 +1,4 @@
-name: Build everything
+name: Release
 
 on:
   workflow_dispatch:
@@ -85,7 +85,7 @@ jobs:
     runs-on: ubuntu-20.04
     needs:
       - musl
-      - osx
+      - macos
     steps:
       - uses: actions/checkout@v2
       - name: download clients
