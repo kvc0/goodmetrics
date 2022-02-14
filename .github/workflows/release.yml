@@ -47,7 +47,6 @@ jobs:
         run: cargo build --release
       - name: tar
         run: |
-          tree
           pushd target/release/
           tar cvzf osx_x86_64.tar.gz goodmetrics goodmetricsd
           popd
@@ -74,10 +73,10 @@ jobs:
       - name: tar
         run: |
           tree
-          pushd target/release/
+          pushd target/x86_64-unknown-linux-musl/release/
           tar cvzf linux_x86_64.tar.gz goodmetrics goodmetricsd
           popd
-          mv target/release/linux_x86_64.tar.gz ./
+          mv target/x86_64-unknown-linux-musl/release/linux_x86_64.tar.gz ./
       - name: Upload client artifact
         uses: actions/upload-artifact@v2
         with:
