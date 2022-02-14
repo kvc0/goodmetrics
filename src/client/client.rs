@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use config::config::{get_args, Subcommand};
-use metrics::{MetricsRequest, metrics_client::MetricsClient};
+use metrics::{metrics_client::MetricsClient, MetricsRequest};
 use rustls::{ClientConfig, ServerCertVerifier};
 use tonic::transport::Channel;
 
@@ -21,7 +21,7 @@ async fn main() {
     )
     .init();
 
-//    log::info!("{}", serde_json::to_string(&Measurement { name: "asd".to_string(), measurement_type: Some(metrics::measurement::MeasurementType::Gauge(Gauge { value: 42.0 })) }).unwrap());
+    //    log::info!("{}", serde_json::to_string(&Measurement { name: "asd".to_string(), measurement_type: Some(metrics::measurement::MeasurementType::Gauge(Gauge { value: 42.0 })) }).unwrap());
 
     match args.command {
         Subcommand::Send { metrics } => {
@@ -33,26 +33,28 @@ async fn main() {
                 Ok(c) => {
                     log::debug!("connected: {:?}", c);
                     c
-                },
+                }
                 Err(e) => {
                     log::error!("failed to connect: {:?}", e);
                     std::process::exit(2);
-                },
+                }
             };
 
-            let result = client.send_metrics(MetricsRequest {
-                shared_dimensions: HashMap::new(),
-                metrics: metrics,
-            }).await;
+            let result = client
+                .send_metrics(MetricsRequest {
+                    shared_dimensions: HashMap::new(),
+                    metrics: metrics,
+                })
+                .await;
             match result {
                 Ok(r) => {
                     log::info!("result: {:?}", r);
-                },
+                }
                 Err(e) => {
                     log::error!("error: {:?}", e);
-                },
+                }
             }
-        },
+        }
     }
 }
 
@@ -60,11 +62,12 @@ async fn get_client(endpoint: &str) -> Result<MetricsClient<Channel>, Box<dyn st
     // FIXME: set up optional no-issuer-validation. Can keep
     //        hostname validation I think though?
     let mut config = ClientConfig::new();
-    config.dangerous().set_certificate_verifier(Arc::new(StupidVerifier {}));
-    config.alpn_protocols = vec![ "h2".to_string().as_bytes().to_vec() ];
+    config
+        .dangerous()
+        .set_certificate_verifier(Arc::new(StupidVerifier {}));
+    config.alpn_protocols = vec!["h2".to_string().as_bytes().to_vec()];
 
-    let tls = tonic::transport::ClientTlsConfig::new()
-        .rustls_client_config(config);
+    let tls = tonic::transport::ClientTlsConfig::new().rustls_client_config(config);
 
     let channel = Channel::from_shared(endpoint.to_string())?
         .tls_config(tls)?

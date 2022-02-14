@@ -5,7 +5,9 @@ use crate::sink::postgres_sink::SinkError;
 
 use super::postgres_connector::PostgresConnector;
 
-pub async fn get_or_create_statistic_set_type(connector: &mut PostgresConnector) -> Result<Type, SinkError> {
+pub async fn get_or_create_statistic_set_type(
+    connector: &mut PostgresConnector,
+) -> Result<Type, SinkError> {
     let transaction = connector.use_connection().await?;
     match get_statistic_set_type(&transaction).await {
         Ok(def) => Ok(def),
@@ -13,7 +15,10 @@ pub async fn get_or_create_statistic_set_type(connector: &mut PostgresConnector)
             if let Some(dbe) = e.as_db_error() {
                 match dbe.code() {
                     &SqlState::UNDEFINED_OBJECT => {
-                        log::info!("Probably missing statistic_set type. Going to try to make it: {:?}", dbe);
+                        log::info!(
+                            "Probably missing statistic_set type. Going to try to make it: {:?}",
+                            dbe
+                        );
                         drop(transaction);
 
                         let transaction = connector.use_connection().await?;
@@ -23,7 +28,10 @@ pub async fn get_or_create_statistic_set_type(connector: &mut PostgresConnector)
                         Ok(t)
                     }
                     _ => {
-                        log::info!("Can't find the statistic_set type, so I can't run: {:?}", dbe);
+                        log::info!(
+                            "Can't find the statistic_set type, so I can't run: {:?}",
+                            dbe
+                        );
 
                         Err(SinkError::Postgres(e))
                     }
@@ -35,18 +43,22 @@ pub async fn get_or_create_statistic_set_type(connector: &mut PostgresConnector)
     }
 }
 
-async fn get_statistic_set_type(transaction: &Transaction<'_>) -> Result<Type, tokio_postgres::Error> {
+async fn get_statistic_set_type(
+    transaction: &Transaction<'_>,
+) -> Result<Type, tokio_postgres::Error> {
     match transaction.prepare("SELECT $1::statistic_set").await {
         Ok(statement) => {
             let statistic_set_type = statement.params()[0].clone();
 
             Ok(statistic_set_type)
         }
-        Err(e) => Err(e)
+        Err(e) => Err(e),
     }
 }
 
-async fn create_statistic_set_type(transaction: &Transaction<'_>) -> Result<Type, tokio_postgres::Error> {
+async fn create_statistic_set_type(
+    transaction: &Transaction<'_>,
+) -> Result<Type, tokio_postgres::Error> {
     match transaction.batch_execute(r#"
 -- Here is a data type I find highly useful when recording high frequency events:
 CREATE TYPE statistic_set AS (

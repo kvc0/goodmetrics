@@ -6,18 +6,26 @@ lazy_static! {
     static ref NOT_WHITESPACE: Regex = Regex::new(r"[^\w]+").unwrap();
 }
 
-pub async fn add_column(transaction: &Transaction<'_>, table_name: &str, column_name: &str, data_type: &str) -> Result<(), tokio_postgres::Error> {
-    transaction.batch_execute(
-    &format!(
+pub async fn add_column(
+    transaction: &Transaction<'_>,
+    table_name: &str,
+    column_name: &str,
+    data_type: &str,
+) -> Result<(), tokio_postgres::Error> {
+    transaction
+        .batch_execute(&format!(
             "alter table {table} add column {column} {data_type}",
-            table=table_name,
-            column=column_name,
-            data_type=data_type,
-        )
-    ).await
+            table = table_name,
+            column = column_name,
+            data_type = data_type,
+        ))
+        .await
 }
 
-pub async fn create_table(transaction: &Transaction<'_>, table_name: &str) -> Result<(), tokio_postgres::Error> {
+pub async fn create_table(
+    transaction: &Transaction<'_>,
+    table_name: &str,
+) -> Result<(), tokio_postgres::Error> {
     transaction.batch_execute(
     &format!(
             r#"create table {table} (time timestamptz);

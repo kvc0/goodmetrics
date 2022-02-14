@@ -1,7 +1,7 @@
 use crate::proto::metrics::pb::Datum;
 
-pub mod postgres_sink;
 pub mod metricssendqueue;
+pub mod postgres_sink;
 
 pub trait MetricsSink: Send {
     fn drain(&self, metrics: Vec<Datum>) -> Result<String, ErrorCode>;
@@ -9,5 +9,5 @@ pub trait MetricsSink: Send {
 
 #[derive(Debug)]
 pub enum ErrorCode {
-    QueueFull
+    QueueFull,
 }

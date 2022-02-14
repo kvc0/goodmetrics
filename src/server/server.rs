@@ -1,20 +1,23 @@
 use config::options::get_args;
 use servers::goodmetrics::GoodMetricsServer;
 use sink::{metricssendqueue::MetricsSendQueue, postgres_sink::PostgresSender};
-use tonic::transport::{Server, ServerTlsConfig, Identity};
+use tonic::transport::{Identity, Server, ServerTlsConfig};
 
-use std::{net::SocketAddr, cmp::min, sync::Arc};
-use tokio::{net::TcpListener, join};
+use std::{cmp::min, net::SocketAddr, sync::Arc};
+use tokio::{join, net::TcpListener};
 
 mod config;
+mod postgres_things;
 mod servers;
 mod sink;
-mod postgres_things;
 
 mod proto;
 use proto::metrics::pb::metrics_server::MetricsServer;
 
-async fn serve(args: Arc<config::options::Options>, send_queue: MetricsSendQueue) -> Result<(), Box<dyn std::error::Error>> {
+async fn serve(
+    args: Arc<config::options::Options>,
+    send_queue: MetricsSendQueue,
+) -> Result<(), Box<dyn std::error::Error>> {
     let address: std::net::SocketAddr = args.listen_socket_address.parse().unwrap();
     let socket = socket2::Socket::new(
         match address {
@@ -35,7 +38,7 @@ async fn serve(args: Arc<config::options::Options>, send_queue: MetricsSendQueue
     let listener = TcpListener::from_std(socket.into()).unwrap();
     let incoming = tokio_stream::wrappers::TcpListenerStream::new(listener);
 
-    let one_server_thread = GoodMetricsServer{
+    let one_server_thread = GoodMetricsServer {
         metrics_sink: send_queue,
     };
 
@@ -52,7 +55,9 @@ async fn serve(args: Arc<config::options::Options>, send_queue: MetricsSendQueue
     Ok(())
 }
 
-async fn get_identity(options: &config::options::Options) -> Result<Identity, Box<dyn std::error::Error>> {
+async fn get_identity(
+    options: &config::options::Options,
+) -> Result<Identity, Box<dyn std::error::Error>> {
     let identity = if !options.cert.is_empty() && !options.cert_private_key.is_empty() {
         let cert = tokio::fs::read("examples/data/tls/server.pem").await?;
         let key = tokio::fs::read("examples/data/tls/server.key").await?;
@@ -81,10 +86,10 @@ fn main() {
     .init();
 
     tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .unwrap()
-                .block_on(run_server(args));
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(run_server(args));
 }
 
 async fn run_server(args: config::options::Options) {
@@ -92,15 +97,14 @@ async fn run_server(args: config::options::Options) {
     let args_shared = Arc::from(args);
     let (send_queue, receive_queue) = MetricsSendQueue::new();
 
-    let mut sender = match PostgresSender::new_connection(&args_shared.connection_string, receive_queue).await {
-        Ok(sender) => {
-            sender
-        },
-        Err(e) => {
-            log::error!("failed to start server: {:?}", e);
-            std::process::exit(3)
-        },
-    };
+    let mut sender =
+        match PostgresSender::new_connection(&args_shared.connection_string, receive_queue).await {
+            Ok(sender) => sender,
+            Err(e) => {
+                log::error!("failed to start server: {:?}", e);
+                std::process::exit(3)
+            }
+        };
 
     // Consume stuff on a background task
     let bg_task = sender.consume_stuff();
@@ -110,7 +114,11 @@ async fn run_server(args: config::options::Options) {
         let thread_send_queue = send_queue.clone();
 
         let h = std::thread::spawn(move || {
-            log::info!("starting server thread {} listening on {}", i, &threadlocal_args.listen_socket_address);
+            log::info!(
+                "starting server thread {} listening on {}",
+                i,
+                &threadlocal_args.listen_socket_address
+            );
 
             tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -122,7 +130,7 @@ async fn run_server(args: config::options::Options) {
         handlers.push(h);
     }
 
-    match join!(bg_task){
+    match join!(bg_task) {
         (Ok(_),) => log::info!("joined background task"),
         (Err(e),) => log::error!("joined background task with error: {:?}", e),
     };

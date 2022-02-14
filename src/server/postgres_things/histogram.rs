@@ -4,11 +4,13 @@ use postgres_types::Type;
 use serde_json::json;
 use tokio_postgres::{error::SqlState, Transaction};
 
-use crate::{sink::postgres_sink::SinkError, proto::metrics::pb::Histogram};
+use crate::{proto::metrics::pb::Histogram, sink::postgres_sink::SinkError};
 
 use super::postgres_connector::PostgresConnector;
 
-pub async fn get_or_create_histogram_type(connector: &mut PostgresConnector) -> Result<Type, SinkError> {
+pub async fn get_or_create_histogram_type(
+    connector: &mut PostgresConnector,
+) -> Result<Type, SinkError> {
     let transaction = connector.use_connection().await?;
     match get_histogram_type(&transaction).await {
         Ok(def) => Ok(def),
@@ -16,7 +18,10 @@ pub async fn get_or_create_histogram_type(connector: &mut PostgresConnector) -> 
             if let Some(dbe) = e.as_db_error() {
                 match dbe.code() {
                     &SqlState::UNDEFINED_OBJECT => {
-                        log::info!("Probably missing histogram type. Going to try to make it: {:?}", dbe);
+                        log::info!(
+                            "Probably missing histogram type. Going to try to make it: {:?}",
+                            dbe
+                        );
                         drop(transaction);
 
                         let transaction = connector.use_connection().await?;
@@ -45,22 +50,24 @@ async fn get_histogram_type(transaction: &Transaction<'_>) -> Result<Type, tokio
 
             Ok(histogram_type)
         }
-        Err(e) => {
-            Err(e)
-        }
+        Err(e) => Err(e),
     }
 }
 
 impl Histogram {
     pub fn to_stupidmap(&self) -> serde_json::Value {
-        let a: HashMap<String, i64> = self.buckets.iter().map(|(k, v)| {
-            (k.to_string(), *v)
-        }).collect();
+        let a: HashMap<String, i64> = self
+            .buckets
+            .iter()
+            .map(|(k, v)| (k.to_string(), *v))
+            .collect();
         json!(a)
     }
 }
 
-async fn create_histogram_type(transaction: &Transaction<'_>) -> Result<Type, tokio_postgres::Error> {
+async fn create_histogram_type(
+    transaction: &Transaction<'_>,
+) -> Result<Type, tokio_postgres::Error> {
     match transaction.batch_execute(r#"
 -- Data type alias for readability
 create domain histogram as jsonb;
