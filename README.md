@@ -18,6 +18,15 @@ This is the way (to record metrics)
 # Clients
 * [Kotlin](https://github.com/WarriorOfWire/goodmetrics_kotlin)
 
+# Development
+Both rustfmt and clippy are checked on PR. This repo currently treats all clippy lint violations as errors.
+
+## Add pre-commit hook:
+Runs linters on commit to help you check in code that passes PR checks.
+```
+ln -s ../../git_hooks/pre-commit .git/hooks/pre-commit
+```
+
 # Philosophy
 
 Not perfect, but it's good.

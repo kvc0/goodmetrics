@@ -1,0 +1,8 @@
+#!/bin/bash
+set -e
+
+echo you can use cargo fmt to fix these:
+cargo fmt -- --check
+
+echo you might want to understand why these are the way they are:
+cargo clippy --all-targets --all-features -- -D warnings
