@@ -48,14 +48,14 @@ jobs:
       - name: tar
         run: |
           pushd target/release/
-          tar cvzf osx_x86_64.tar.gz goodmetrics goodmetricsd
+          tar cvzf goodmetrics-osx.x86_64.tar.gz goodmetrics goodmetricsd
           popd
-          mv target/release/osx_x86_64.tar.gz ./
+          mv target/release/goodmetrics-osx.x86_64.tar.gz ./
       - name: Upload client artifact
         uses: actions/upload-artifact@v2
         with:
-          name: osx_x86_64.tar.gz
-          path: ./osx_x86_64.tar.gz
+          name: goodmetrics-osx.x86_64.tar.gz
+          path: ./goodmetrics-osx.x86_64.tar.gz
   musl:
     name: musl
     runs-on: ubuntu-20.04
@@ -74,14 +74,14 @@ jobs:
         run: |
           tree
           pushd target/x86_64-unknown-linux-musl/release/
-          tar cvzf linux_x86_64.tar.gz goodmetrics goodmetricsd
+          tar cvzf goodmetrics-linux.x86_64.tar.gz goodmetrics goodmetricsd
           popd
-          mv target/x86_64-unknown-linux-musl/release/linux_x86_64.tar.gz ./
+          mv target/x86_64-unknown-linux-musl/release/goodmetrics-linux.x86_64.tar.gz ./
       - name: Upload client artifact
         uses: actions/upload-artifact@v2
         with:
-          name: linux_x86_64.tar.gz
-          path: ./linux_x86_64.tar.gz
+          name: goodmetrics-linux.x86_64.tar.gz
+          path: ./goodmetrics-linux.x86_64.tar.gz
 
   upload-release:
     name: upload release
