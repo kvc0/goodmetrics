@@ -32,4 +32,11 @@ pub(crate) enum Subcommand {
         #[structopt(parse(try_from_str = serde_json::from_str))]
         metrics: Vec<Datum>,
     },
+    #[structopt(about = "Poll prometheus metrics")]
+    PollPrometheus {
+        #[structopt(default_value = "http://127.0.0.1:9090")]
+        poll_endpoint: String,
+        #[structopt(long, default_value = "10")]
+        interval_seconds: u32,
+    },
 }

@@ -1,4 +1,4 @@
-use commands::send_metrics::send_metrics;
+use commands::{prometheus::poll_prometheus, send_metrics::send_metrics};
 use config::{cli_config::get_args, options::Subcommand};
 
 pub mod metrics {
@@ -22,5 +22,9 @@ async fn main() {
 
     match args.command {
         Subcommand::Send { metrics } => send_metrics(metrics, &args.goodmetrics_server).await,
+        Subcommand::PollPrometheus {
+            poll_endpoint,
+            interval_seconds,
+        } => poll_prometheus(poll_endpoint, interval_seconds).await,
     }
 }
