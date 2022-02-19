@@ -1,4 +1,4 @@
-use commands::{prometheus::poll_prometheus, send_metrics::send_metrics};
+use commands::{poll_prometheus::poll_prometheus, send_metrics::send_metrics};
 use config::{cli_config::get_args, options::Subcommand};
 
 pub mod metrics {
@@ -6,6 +6,7 @@ pub mod metrics {
 }
 mod commands;
 mod config;
+mod prometheus;
 
 #[tokio::main]
 async fn main() {

@@ -34,7 +34,7 @@ pub(crate) enum Subcommand {
     },
     #[structopt(about = "Poll prometheus metrics")]
     PollPrometheus {
-        #[structopt(default_value = "http://127.0.0.1:9090")]
+        #[structopt(default_value = "http://127.0.0.1:9100/metrics")]
         poll_endpoint: String,
         #[structopt(long, default_value = "10")]
         interval_seconds: u32,
