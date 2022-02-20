@@ -10,7 +10,6 @@ fn main() {
             "goodmetrics.StatisticSet",
             "#[derive(postgres_types::ToSql, postgres_types::FromSql)]",
         )
-        // LOL YOU GOTTA USE TYPE NAME "record" FOR COMPOSITE TYPES BECAUSE THE LIBRARY FLIPS ITS LID OTHERWISE
         .type_attribute(
             "goodmetrics.StatisticSet",
             r#"#[postgres(name = "statistic_set")]"#,

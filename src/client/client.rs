@@ -19,13 +19,12 @@ async fn main() {
     )
     .init();
 
-    //    log::info!("{}", serde_json::to_string(&Measurement { name: "asd".to_string(), measurement_type: Some(metrics::measurement::MeasurementType::Gauge(Gauge { value: 42.0 })) }).unwrap());
-
     match args.command {
         Subcommand::Send { metrics } => send_metrics(metrics, &args.goodmetrics_server).await,
         Subcommand::PollPrometheus {
             poll_endpoint,
             interval_seconds,
-        } => poll_prometheus(poll_endpoint, interval_seconds).await,
+            bonus_dimensions,
+        } => poll_prometheus(poll_endpoint, interval_seconds, bonus_dimensions).await,
     }
 }

@@ -1,10 +1,12 @@
+use std::collections::HashMap;
+
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use structopt::StructOpt;
 use structopt_toml::StructOptToml;
 
 use super::cli_config::default_dir;
-use crate::metrics::Datum;
+use crate::metrics::{Datum, Dimension};
 
 lazy_static! {
     static ref DEFAULT_DIR: String = default_dir();
@@ -36,7 +38,11 @@ pub(crate) enum Subcommand {
     PollPrometheus {
         #[structopt(default_value = "http://127.0.0.1:9100/metrics")]
         poll_endpoint: String,
+
         #[structopt(long, default_value = "10")]
         interval_seconds: u32,
+
+        #[structopt(long, default_value = "{}", parse(try_from_str = serde_json::from_str))]
+        bonus_dimensions: HashMap<String, Dimension>,
     },
 }
