@@ -5,18 +5,17 @@ use regex::Regex;
 
 use crate::metrics::{dimension, measurement, Datum, Dimension, Measurement};
 
-pub async fn read_prometheus(
-    location: &str,
-    now_nanos: u64,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let response = reqwest::get(location).await?.text().await?;
-    decode_prometheus(response, now_nanos);
-    Ok(())
-}
-
 lazy_static! {
     // # TYPE go_memstats_alloc_bytes gauge
     static ref MEASUREMENT_TYPE: Regex = Regex::new(r#"^# TYPE (?P<measurement>[\w_]+) (?P<type>[\w]+)$"#).unwrap();
+}
+
+pub async fn read_prometheus(
+    location: &str,
+    now_nanos: u64,
+) -> Result<Vec<Datum>, Box<dyn std::error::Error>> {
+    let response = reqwest::get(location).await?.text().await?;
+    Ok(decode_prometheus(response, now_nanos))
 }
 
 fn decode_prometheus(body: String, now_nanos: u64) -> Vec<Datum> {
@@ -40,7 +39,7 @@ fn decode_prometheus(body: String, now_nanos: u64) -> Vec<Datum> {
         };
         match parse_function(measurement_name, line, now_nanos) {
             Some(datum) => {
-                log::info!("datum: {:?}", datum);
+                log::trace!("datum: {:?}", datum);
                 datums.push(datum);
             }
             None => {
