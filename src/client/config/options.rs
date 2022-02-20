@@ -36,6 +36,11 @@ pub(crate) enum Subcommand {
     },
     #[structopt(about = "Poll prometheus metrics")]
     PollPrometheus {
+        #[structopt(
+            about = "Prefix all the tables emitted by this prometheus reporter. This way you can put things like per-server host metrics under a host_* or node_* prefix."
+        )]
+        prefix: String,
+
         #[structopt(default_value = "http://127.0.0.1:9100/metrics")]
         poll_endpoint: String,
 

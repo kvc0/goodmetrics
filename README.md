@@ -27,28 +27,25 @@ If you change a column's data type (illegal) and you didn't change the name, jus
 will recreate with the currently-reported type. Failures to self-heal from missing data are bugs; please report them!
 
 ## Other upstreams
-It can be used with other metrics upstreams as well, however. If you have some legacy Prometheus component, for example, you can poll it and
-send enriched data to Timescale. This can add value to your existing metrics over many existing solutions, as you can emit metrics from one
-kind of Prometheus collector as a single table.
-For example, you might emit `host_metrics` from a metrics collector that exposes itself as a Prometheus polling endoint & poll it via `goodmetrics`
-(feature coming soon). You'd then have a table in Timescale called `host_metrics` (edgy, i know) with `1` row per host per poll interval, and a column
-per measurement. Storing this way you can graph your Prometheus metrics really deeply in Grafana. For example, to look at the cpu utilization of your
-servers with the top 10 highest network out traffic you might do something like:
+It can be used with other metrics upstreams as well, however. If you have some legacy Prometheus component, you can poll it and send data to Timescale.
+For example, you might emit metrics from a `node_exporter` & poll it via `goodmetrics poll-prometheus node`.
+You'd then have tables in Timescale per metric with `1` row per host per poll interval, and a column per dimension/tag. Storing this way you can graph
+your Prometheus metrics really deeply in Grafana. For example, to look at the cpu utilization of your servers with the top 10 highest network out
+traffic you might do something like:
 ```sql
 with top_10_by_net_out_bytes as (
-  select hostname from host_metrics where time > now() - interval '3 hours'
-  order by net_out_bytes desc
+  select hostname from node_net_out_bytes where time > now() - interval '3 hours'
+  order by value desc
   limit 10
 )
-select time, hostname, cpu_utilization
-from host_metrics
+select time, hostname, value as cpu_utilization
+from node_cpu_utilization
 where
   time > now() - interval '3 hours'
   and hostname in (select hostname from top_10_by_net_out_bytes)
 order by time
 ```
-No funny stuff, just a common table expression (CTE) to make the query read nicely and a couple simple conditions. Putting the data that relates together
-_actually together_ has been a good idea for decades and it still is.
+No funny stuff, just a common table expression (CTE) to make the query read nicely and a couple simple conditions.
 
 ## Pictures
 ![general overview of deployment shape](https://user-images.githubusercontent.com/3454741/153928842-44b5eb0e-74b1-4e48-9f49-0db1d0490e57.svg)

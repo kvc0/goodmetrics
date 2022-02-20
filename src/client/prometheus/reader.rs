@@ -1,4 +1,4 @@
-use std::{str::Chars, collections::HashMap};
+use std::{collections::HashMap, str::Chars};
 
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -14,12 +14,23 @@ pub async fn read_prometheus(
     location: &str,
     now_nanos: u64,
     bonus_dimensions: &HashMap<String, Dimension>,
+    table_prefix: &str,
 ) -> Result<Vec<Datum>, Box<dyn std::error::Error>> {
     let response = reqwest::get(location).await?.text().await?;
-    Ok(decode_prometheus(response, now_nanos, bonus_dimensions))
+    Ok(decode_prometheus(
+        response,
+        now_nanos,
+        bonus_dimensions,
+        table_prefix,
+    ))
 }
 
-fn decode_prometheus(body: String, now_nanos: u64, bonus_dimensions: &HashMap<String, Dimension>) -> Vec<Datum> {
+fn decode_prometheus(
+    body: String,
+    now_nanos: u64,
+    bonus_dimensions: &HashMap<String, Dimension>,
+    table_prefix: &str,
+) -> Vec<Datum> {
     let mut parse_state = ParseState::LookingForType;
     let mut measurement_name: &str = "";
     let mut datums: Vec<Datum> = vec![];
@@ -43,6 +54,7 @@ fn decode_prometheus(body: String, now_nanos: u64, bonus_dimensions: &HashMap<St
                 bonus_dimensions.iter().for_each(|(name, value)| {
                     datum.dimensions.insert(name.clone(), value.clone());
                 });
+                datum.metric = format!("{}{}", table_prefix, datum.metric);
                 log::trace!("datum: {:?}", datum);
                 datums.push(datum);
             }

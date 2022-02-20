@@ -25,6 +25,25 @@ async fn main() {
             poll_endpoint,
             interval_seconds,
             bonus_dimensions,
-        } => poll_prometheus(poll_endpoint, interval_seconds, bonus_dimensions).await,
+            prefix,
+        } => {
+            poll_prometheus(
+                poll_endpoint,
+                interval_seconds,
+                bonus_dimensions,
+                underscore_suffix(prefix),
+            )
+            .await
+        }
     }
+}
+
+fn underscore_suffix(s: String) -> String {
+    if s.is_empty() {
+        return s;
+    }
+    if s.ends_with('_') {
+        return s;
+    }
+    s + "_"
 }
