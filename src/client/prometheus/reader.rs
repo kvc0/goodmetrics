@@ -26,38 +26,56 @@ fn decode_prometheus(body: String, now_nanos: u64) -> Vec<Datum> {
 
     for line in body.lines() {
         log::trace!("{:?}", line);
-        loop {
-            parse_state = match parse_state {
-                ParseState::LookingForType => {
-                    let (pstate, mname) = look_for_type(line);
-                    measurement_name = mname;
-                    pstate
-                }
-                ParseState::ReadingGauge => match read_gauge(measurement_name, line, now_nanos) {
-                    Some(datum) => {
-                        log::info!("datum: {:?}", datum);
-                        datums.push(datum);
-                        break;
-                    }
-                    None => {
-                        parse_state = ParseState::LookingForType;
-                        continue;
-                    }
-                },
-                ParseState::ReadingCounter => todo!(),
-                ParseState::ReadingHistogram => todo!(),
-                ParseState::ReadingSummary => {
-                    log::debug!("Fuck summaries. Use histograms instead.");
-                    ParseState::LookingForType
-                }
-            };
-            break;
+        let parse_function = match parse_state {
+            ParseState::LookingForType => {
+                let (pstate, mname) = look_for_type(line);
+                measurement_name = mname;
+                parse_state = pstate;
+                continue;
+            }
+            ParseState::ReadingGauge => read_gauge,
+            ParseState::ReadingCounter => read_counter,
+            ParseState::ReadingHistogram => read_histogram,
+            ParseState::ReadingSummary => read_summary,
+        };
+        match parse_function(measurement_name, line, now_nanos) {
+            Some(datum) => {
+                log::info!("datum: {:?}", datum);
+                datums.push(datum);
+            }
+            None => {
+                let (pstate, mname) = look_for_type(line);
+                measurement_name = mname;
+                parse_state = pstate;
+            }
         }
     }
-    vec![]
+    datums
+}
+
+fn read_summary(measurement_name: &str, line: &str, unix_nanos: u64) -> Option<Datum> {
+    // You should not use summaries. They are awful. Fuck prometheus for leading you astray.
+    read_a_thing(measurement_name, line, unix_nanos)
+}
+
+fn read_histogram(measurement_name: &str, line: &str, unix_nanos: u64) -> Option<Datum> {
+    // ideally would report a goodmetrics histogram but prometheus histograms can have
+    // cumulative buckets or not. Since I dont really know what kind of histogram this
+    // is and a goodmerics histogram is always the non-stupid (that is, bucketed) flavor
+    // of histogram, I'm leaving this as a basic list of regular metrics.
+    // In case it's not clear by now, fuck prometheus.
+    read_a_thing(measurement_name, line, unix_nanos)
+}
+
+fn read_counter(measurement_name: &str, line: &str, unix_nanos: u64) -> Option<Datum> {
+    read_a_thing(measurement_name, line, unix_nanos)
 }
 
 fn read_gauge(measurement_name: &str, line: &str, unix_nanos: u64) -> Option<Datum> {
+    read_a_thing(measurement_name, line, unix_nanos)
+}
+
+fn read_a_thing(measurement_name: &str, line: &str, unix_nanos: u64) -> Option<Datum> {
     if !line.starts_with(measurement_name) {
         return None;
     }
@@ -136,8 +154,8 @@ fn read_gauge(measurement_name: &str, line: &str, unix_nanos: u64) -> Option<Dat
         -1.0
     });
     // Measurements can be repeated with any tags, so we emit 1 row per dimension position. Idk what else
-    // to call the value column... there's not an obvious good choice here. Prometheus metrics are ass so
-    // yeah sorry & I hope you're not stuck with them for important stuff.
+    // to call the value column... there's not a good choice here that's obvious to me. Prometheus metrics
+    // are ass though so yeah sorry about this & I hope you're not stuck with them for important stuff.
     datum.measurements.insert(
         "value".to_string(),
         Measurement {
