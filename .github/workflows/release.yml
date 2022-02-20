@@ -56,38 +56,57 @@ jobs:
         with:
           name: goodmetrics-osx.x86_64.tar.gz
           path: ./goodmetrics-osx.x86_64.tar.gz
-  musl:
-    name: musl
+  # musl:
+  #   name: musl
+  #   runs-on: ubuntu-20.04
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - uses: Swatinem/rust-cache@v1
+  #     - name: install rust musl toolchain
+  #       run: rustup target add x86_64-unknown-linux-musl
+  #     - name: update apt
+  #       run: sudo apt-get update
+  #     - name: install musl-tools
+  #       run: sudo apt-get install -y build-essential musl musl-dev musl-tools libssl-dev pkg-config
+  #     - name: build
+  #       run: cargo build --release --target x86_64-unknown-linux-musl
+  #     - name: tar
+  #       run: |
+  #         tree
+  #         pushd target/x86_64-unknown-linux-musl/release/
+  #         tar cvzf goodmetrics-linux.x86_64.tar.gz goodmetrics goodmetricsd
+  #         popd
+  #         mv target/x86_64-unknown-linux-musl/release/goodmetrics-linux.x86_64.tar.gz ./
+  #     - name: Upload client artifact
+  #       uses: actions/upload-artifact@v2
+  #       with:
+  #         name: goodmetrics-linux.x86_64.tar.gz
+  #         path: ./goodmetrics-linux.x86_64.tar.gz
+  ubuntu:
+    name: ubuntu
     runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v1
-      - name: install rust musl toolchain
-        run: rustup target add x86_64-unknown-linux-musl
-      - name: update apt
-        run: sudo apt-get update
-      - name: install musl-tools
-        run: sudo apt-get install -y build-essential musl musl-dev musl-tools libssl-dev pkg-config
       - name: build
-        run: cargo build --release --target x86_64-unknown-linux-musl
+        run: cargo build --release
       - name: tar
-        run: |
-          tree
-          pushd target/x86_64-unknown-linux-musl/release/
-          tar cvzf goodmetrics-linux.x86_64.tar.gz goodmetrics goodmetricsd
-          popd
-          mv target/x86_64-unknown-linux-musl/release/goodmetrics-linux.x86_64.tar.gz ./
+          run: |
+            pushd target/release/
+            tar cvzf goodmetrics-ubuntu.x86_64.tar.gz goodmetrics goodmetricsd
+            popd
+            mv target/release/goodmetrics-ubuntu.x86_64.tar.gz ./
       - name: Upload client artifact
         uses: actions/upload-artifact@v2
         with:
-          name: goodmetrics-linux.x86_64.tar.gz
-          path: ./goodmetrics-linux.x86_64.tar.gz
+          name: goodmetrics-ubuntu.x86_64.tar.gz
+          path: ./goodmetrics-ubuntu.x86_64.tar.gz
 
   upload-release:
     name: upload release
     runs-on: ubuntu-20.04
     needs:
-      - musl
+      - ubuntu
       - macos
       - rustfmt
       - clippy
