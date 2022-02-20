@@ -53,6 +53,8 @@ No funny stuff, just a common table expression (CTE) to make the query read nice
 
 # Clients
 * [Kotlin](https://github.com/WarriorOfWire/goodmetrics_kotlin)
+* JSON CLI: `goodmetrics` included in this release. `send-metrics` receives json strings.
+* Prometheus: `goodmetrics` included in this release. `poll-prometheus` avoid using this when you have other choices.
 
 # Development
 Both rustfmt and clippy are checked on PR. This repo currently treats all clippy lint violations as errors.
