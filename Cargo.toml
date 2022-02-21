@@ -14,8 +14,9 @@ path = "src/server/server.rs"
 
 
 [dependencies]
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["full", "tracing"] }
 tokio-stream = { version = "0.1.8", features = ["net"]}
+console-subscriber = { version = "^0" }
 
 # YYYUUUUUUUK these are bound together
 tonic = { version = "0.6.2", features = ["tls", "compression"]}

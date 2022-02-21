@@ -1,13 +1,13 @@
 use lazy_static::lazy_static;
 use regex::Regex;
-use tokio_postgres::Transaction;
+use tokio_postgres::Client;
 
 lazy_static! {
     static ref NOT_WHITESPACE: Regex = Regex::new(r"[^\w]+").unwrap();
 }
 
 pub async fn add_column(
-    transaction: &Transaction<'_>,
+    transaction: &Client,
     table_name: &str,
     column_name: &str,
     data_type: &str,
@@ -23,7 +23,7 @@ pub async fn add_column(
 }
 
 pub async fn create_table(
-    transaction: &Transaction<'_>,
+    transaction: &Client,
     table_name: &str,
 ) -> Result<(), tokio_postgres::Error> {
     transaction.batch_execute(

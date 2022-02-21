@@ -1,7 +1,7 @@
 use std::sync::{atomic::AtomicBool, Arc};
 
 use tokio::task::JoinHandle;
-use tokio_postgres::{tls::NoTlsStream, Client, Connection, NoTls, Socket, Transaction};
+use tokio_postgres::{tls::NoTlsStream, Client, Connection, NoTls, Socket};
 
 use crate::sink::postgres_sink::{DescribedError, SinkError};
 
@@ -25,10 +25,9 @@ impl PostgresConnector {
         })
     }
 
-    pub async fn use_connection(&'_ mut self) -> Result<Transaction<'_>, SinkError> {
+    pub async fn use_connection(&'_ mut self) -> Result<&'_ mut Client, SinkError> {
         // need to get the connection via the method that ensures it's connected
-        let client = self.get_connection().await?;
-        Ok(client.transaction().await?)
+        Ok(self.get_connection().await?)
     }
 
     async fn get_connection(&'_ mut self) -> Result<&'_ mut Client, SinkError> {

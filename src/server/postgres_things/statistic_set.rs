@@ -1,5 +1,5 @@
 use postgres_types::Type;
-use tokio_postgres::{error::SqlState, Transaction};
+use tokio_postgres::{error::SqlState, Client};
 
 use crate::sink::postgres_sink::SinkError;
 
@@ -8,8 +8,8 @@ use super::postgres_connector::PostgresConnector;
 pub async fn get_or_create_statistic_set_type(
     connector: &mut PostgresConnector,
 ) -> Result<Type, SinkError> {
-    let transaction = connector.use_connection().await?;
-    match get_statistic_set_type(&transaction).await {
+    let client = connector.use_connection().await?;
+    match get_statistic_set_type(client).await {
         Ok(def) => Ok(def),
         Err(e) => {
             if let Some(dbe) = e.as_db_error() {
@@ -19,11 +19,9 @@ pub async fn get_or_create_statistic_set_type(
                             "Probably missing statistic_set type. Going to try to make it: {:?}",
                             dbe
                         );
-                        drop(transaction);
 
-                        let transaction = connector.use_connection().await?;
-                        let t = create_statistic_set_type(&transaction).await?;
-                        transaction.commit().await?;
+                        let client = connector.use_connection().await?;
+                        let t = create_statistic_set_type(client).await?;
 
                         Ok(t)
                     }
@@ -43,10 +41,8 @@ pub async fn get_or_create_statistic_set_type(
     }
 }
 
-async fn get_statistic_set_type(
-    transaction: &Transaction<'_>,
-) -> Result<Type, tokio_postgres::Error> {
-    match transaction.prepare("SELECT $1::statistic_set").await {
+async fn get_statistic_set_type(client: &Client) -> Result<Type, tokio_postgres::Error> {
+    match client.prepare("SELECT $1::statistic_set").await {
         Ok(statement) => {
             let statistic_set_type = statement.params()[0].clone();
 
@@ -56,10 +52,8 @@ async fn get_statistic_set_type(
     }
 }
 
-async fn create_statistic_set_type(
-    transaction: &Transaction<'_>,
-) -> Result<Type, tokio_postgres::Error> {
-    match transaction.batch_execute(r#"
+async fn create_statistic_set_type(client: &Client) -> Result<Type, tokio_postgres::Error> {
+    match client.batch_execute(r#"
 -- Here is a data type I find highly useful when recording high frequency events:
 CREATE TYPE statistic_set AS (
   minimum     double precision,
@@ -211,7 +205,7 @@ CREATE AGGREGATE accumulate(double precision)
 );
     "#).await {
         Ok(_modified) => {
-            Ok(get_statistic_set_type(transaction).await?)
+            Ok(get_statistic_set_type(client).await?)
         }
         Err(e) => Err(e)
     }

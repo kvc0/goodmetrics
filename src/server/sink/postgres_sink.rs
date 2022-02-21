@@ -156,7 +156,7 @@ impl PostgresSender {
         &mut self,
         grouped_metrics: &BTreeMap<&String, Vec<&Datum>>,
     ) -> Result<usize, SinkError> {
-        let transaction = self.connector.use_connection().await?;
+        let client = self.connector.use_connection().await?;
 
         let mut rows = 0;
         for (metric, datums) in grouped_metrics.iter() {
@@ -166,7 +166,7 @@ impl PostgresSender {
             let all_column_types = get_all_column_types(&dimension_types, &measurement_types);
             let all_column_names = get_all_column_names(&dimension_types, &measurement_types);
 
-            let sink: CopyInSink<bytes::Bytes> = match transaction
+            let sink: CopyInSink<bytes::Bytes> = match client
                 .copy_in::<String, bytes::Bytes>(&format!(
                     "copy {table_name} ({all_columns}) from stdin with binary",
                     table_name = clean_id(metric),
@@ -236,7 +236,7 @@ impl PostgresSender {
             rows += write_and_close(writer, &dimension_types, &measurement_types, datums).await?;
         }
 
-        transaction.commit().await?;
+        // client.commit().await?;
 
         Ok(rows)
     }
@@ -278,23 +278,21 @@ impl PostgresSender {
             },
             SinkError::MissingColumn(what_column) => {
                 log::info!("adding missing column {:?}", what_column);
-                let transaction = self.connector.use_connection().await?;
+                let client = self.connector.use_connection().await?;
                 ddl::add_column(
-                    &transaction,
+                    client,
                     &what_column.table,
                     &what_column.column,
                     &what_column.data_type,
                 )
                 .await?;
-                transaction.commit().await?;
 
                 Ok(true)
             }
             SinkError::MissingTable(what_table) => {
                 log::info!("adding missing table {:?}", what_table);
-                let transaction = self.connector.use_connection().await?;
-                ddl::create_table(&transaction, &what_table.table).await?;
-                transaction.commit().await?;
+                let client = self.connector.use_connection().await?;
+                ddl::create_table(client, &what_table.table).await?;
 
                 Ok(true)
             }
