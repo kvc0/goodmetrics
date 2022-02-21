@@ -308,6 +308,7 @@ async fn write_and_close(
     data: &[&Datum],
 ) -> Result<usize, SinkError> {
     pin_mut!(writer);
+    log::debug!("writing {} rows", data.len());
 
     let mut row: Vec<Box<(dyn ToSql + Sync)>> = Vec::new();
     for datum in data {
