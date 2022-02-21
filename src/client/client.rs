@@ -32,6 +32,7 @@ async fn main() {
                 interval_seconds,
                 bonus_dimensions,
                 underscore_suffix(prefix),
+                &args.goodmetrics_server,
             )
             .await
         }

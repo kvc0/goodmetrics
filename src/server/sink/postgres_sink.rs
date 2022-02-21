@@ -317,6 +317,12 @@ async fn write_and_close(
         let datum_time = SystemTime::UNIX_EPOCH + Duration::from_nanos(datum.unix_nanos);
         row.push(Box::new(datum_time));
         for dimension_name in dimensions.keys() {
+            if !datum.dimensions.contains_key(dimension_name) {
+                log::warn!("skipping dimension: {}", dimension_name);
+                row.push(Box::new(Option::<String>::None));
+                continue;
+            }
+
             let dimension = &datum.dimensions[dimension_name];
             if let Some(value) = dimension.value.as_ref() {
                 row.push(match value {
