@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use postgres_types::Type;
 use serde_json::json;
-use tokio_postgres::{error::SqlState, Client};
+use tokio_postgres::{error::SqlState, Client, GenericClient};
 
 use crate::{proto::metrics::pb::Histogram, sink::postgres_sink::SinkError};
 
@@ -11,8 +11,8 @@ use super::postgres_connector::PostgresConnector;
 pub async fn get_or_create_histogram_type(
     connector: &mut PostgresConnector,
 ) -> Result<Type, SinkError> {
-    let client = connector.use_connection().await?;
-    match get_histogram_type(client).await {
+    let connection = connector.use_connection().await?;
+    match get_histogram_type(connection.client()).await {
         Ok(def) => Ok(def),
         Err(e) => {
             if let Some(dbe) = e.as_db_error() {
@@ -22,9 +22,10 @@ pub async fn get_or_create_histogram_type(
                             "Probably missing histogram type. Going to try to make it: {:?}",
                             dbe
                         );
+                        drop(connection);
 
-                        let client = connector.use_connection().await?;
-                        let t = create_histogram_type(client).await?;
+                        let connection = connector.use_connection().await?;
+                        let t = create_histogram_type(connection.client()).await?;
 
                         Ok(t)
                     }

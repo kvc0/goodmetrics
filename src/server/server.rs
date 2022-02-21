@@ -1,6 +1,9 @@
-use config::options::get_args;
+use config::options::{get_args, Options};
 use servers::goodmetrics::GoodMetricsServer;
-use sink::{metricssendqueue::MetricsSendQueue, postgres_sink::PostgresSender};
+use sink::{
+    metricssendqueue::{MetricsReceiveQueue, MetricsSendQueue},
+    postgres_sink::{PostgresSender, SinkError},
+};
 use tonic::transport::{Identity, Server, ServerTlsConfig};
 
 use std::{cmp::min, net::SocketAddr, sync::Arc};
@@ -98,15 +101,6 @@ async fn run_server(args: config::options::Options) {
     let args_shared = Arc::from(args);
     let (send_queue, receive_queue) = MetricsSendQueue::new();
 
-    let mut sender =
-        match PostgresSender::new_connection(&args_shared.connection_string, receive_queue).await {
-            Ok(sender) => sender,
-            Err(e) => {
-                log::error!("failed to start server: {:?}", e);
-                std::process::exit(3)
-            }
-        };
-
     for i in 0..min(args_shared.max_threads, num_cpus::get()) {
         let threadlocal_args = args_shared.clone();
         let thread_send_queue = send_queue.clone();
@@ -134,7 +128,7 @@ async fn run_server(args: config::options::Options) {
             .enable_all()
             .build()
             .unwrap()
-            .block_on(sender.consume_stuff())
+            .block_on(consume(args_shared, receive_queue))
             .unwrap();
     });
 
@@ -143,4 +137,20 @@ async fn run_server(args: config::options::Options) {
     for h in handlers {
         h.join().unwrap();
     }
+}
+
+async fn consume(
+    args_shared: Arc<Options>,
+    receive_queue: MetricsReceiveQueue,
+) -> Result<(), SinkError> {
+    let mut sender =
+        match PostgresSender::new_connection(&args_shared.connection_string, receive_queue).await {
+            Ok(sender) => sender,
+            Err(e) => {
+                log::error!("failed to start server: {:?}", e);
+                std::process::exit(3)
+            }
+        };
+    sender.consume_stuff().await?;
+    Ok(())
 }

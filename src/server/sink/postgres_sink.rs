@@ -24,7 +24,7 @@ use tokio_postgres::{
     binary_copy::BinaryCopyInWriter,
     error::SqlState,
     types::{ToSql, Type, WrongType},
-    CopyInSink,
+    CopyInSink, GenericClient,
 };
 
 use super::metricssendqueue::MetricsReceiveQueue;
@@ -40,6 +40,19 @@ impl Display for DescribedError {
         fmt.debug_struct("DescribedError")
             .field("message", &self.message)
             .field("cause", &self.inner)
+            .finish()
+    }
+}
+
+#[derive(Debug, Error)]
+pub struct StringError {
+    pub message: String,
+}
+
+impl Display for StringError {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fmt.debug_struct("StringError")
+            .field("message", &self.message)
             .finish()
     }
 }
@@ -81,6 +94,9 @@ pub enum SinkError {
     #[error("Some postgres error with a description")]
     DescribedError(#[from] DescribedError),
 
+    #[error("unhandled error")]
+    StringError(#[from] StringError),
+
     #[error("i gotta have more column")]
     MissingColumn(#[from] MissingColumn),
 
@@ -106,7 +122,9 @@ impl PostgresSender {
         rx: MetricsReceiveQueue,
     ) -> Result<PostgresSender, SinkError> {
         log::debug!("new_connection: {:?}", connection_string);
-        let mut connector = PostgresConnector::new(connection_string.to_string()).await?;
+        let max_conns = 8;
+        let mut connector =
+            PostgresConnector::new(connection_string.to_string(), max_conns).await?;
 
         let type_converter = {
             let statistic_set_type = get_or_create_statistic_set_type(&mut connector).await?;
@@ -277,9 +295,9 @@ impl PostgresSender {
             },
             SinkError::MissingColumn(what_column) => {
                 log::info!("adding missing column {:?}", what_column);
-                let client = self.connector.use_connection().await?;
+                let connection = self.connector.use_connection().await?;
                 ddl::add_column(
-                    client,
+                    connection.client(),
                     &what_column.table,
                     &what_column.column,
                     &what_column.data_type,
@@ -290,12 +308,13 @@ impl PostgresSender {
             }
             SinkError::MissingTable(what_table) => {
                 log::info!("adding missing table {:?}", what_table);
-                let client = self.connector.use_connection().await?;
-                ddl::create_table(client, &what_table.table).await?;
+                let connection = self.connector.use_connection().await?;
+                ddl::create_table(connection.client(), &what_table.table).await?;
 
                 Ok(true)
             }
             SinkError::DescribedError(_e) => todo!(),
+            SinkError::StringError(_) => todo!(),
         };
     }
 }
