@@ -129,22 +129,30 @@ impl PostgresSender {
 
         while let Some(batch) = self.rx.recv().await {
             let grouped_metrics = group_metrics(&batch);
-            let mut try_again = true;
-            while try_again {
-                try_again = match self.run_a_batch(&grouped_metrics).await {
-                    Ok(rows) => {
-                        log::info!("committed ${rows}", rows = rows);
+            log::info!(
+                "Received some metrics. size: {}, metrics: {}",
+                batch.len(),
+                grouped_metrics.len()
+            );
 
-                        false
-                    }
-                    Err(e) => match self.handle_error_and_should_it_retry(e).await {
-                        Ok(should_retry) => should_retry,
-                        Err(retry_failure) => {
-                            log::error!("failed to handle error: {:?}", retry_failure);
+            for (metric, datums) in grouped_metrics.iter() {
+                let mut try_again = true;
+                while try_again {
+                    try_again = match self.run_a_batch(metric, datums).await {
+                        Ok(rows) => {
+                            log::info!("committed rows: {rows}", rows = rows);
 
                             false
                         }
-                    },
+                        Err(e) => match self.handle_error_and_should_it_retry(e).await {
+                            Ok(should_retry) => should_retry,
+                            Err(retry_failure) => {
+                                log::error!("failed to handle error: {:?}", retry_failure);
+
+                                false
+                            }
+                        },
+                    }
                 }
             }
         }
@@ -152,91 +160,82 @@ impl PostgresSender {
         Ok(1)
     }
 
-    async fn run_a_batch(
-        &mut self,
-        grouped_metrics: &BTreeMap<&String, Vec<&Datum>>,
-    ) -> Result<usize, SinkError> {
+    async fn run_a_batch(&mut self, metric: &str, datums: &[&Datum]) -> Result<usize, SinkError> {
         let client = self.connector.use_connection().await?;
 
         let mut rows = 0;
-        for (metric, datums) in grouped_metrics.iter() {
-            let dimension_types = self.type_converter.get_dimension_type_map(datums);
-            let measurement_types = self.type_converter.get_measurement_type_map(datums);
 
-            let all_column_types = get_all_column_types(&dimension_types, &measurement_types);
-            let all_column_names = get_all_column_names(&dimension_types, &measurement_types);
+        let dimension_types = self.type_converter.get_dimension_type_map(datums);
+        let measurement_types = self.type_converter.get_measurement_type_map(datums);
 
-            let sink: CopyInSink<bytes::Bytes> = match client
-                .copy_in::<String, bytes::Bytes>(&format!(
-                    "copy {table_name} ({all_columns}) from stdin with binary",
-                    table_name = clean_id(metric),
-                    all_columns = all_column_names.join(","),
-                ))
-                .await
-            {
-                Ok(sink) => sink,
-                Err(postgres_error) => match postgres_error.as_db_error() {
-                    Some(dberror) => match *dberror.code() {
-                        SqlState::UNDEFINED_COLUMN => {
-                            let pair = UNDEFINED_COLUMN.captures(dberror.message()).unwrap();
-                            let table = pair.name("table").unwrap().as_str();
-                            let column = pair.name("column").unwrap().as_str();
-                            log::info!(
-                                "missing column: {table}.{column}",
-                                table = table,
-                                column = column
-                            );
-                            let the_type = datums
-                                .iter()
-                                .filter_map(|d| match d.dimensions.get(column) {
-                                    Some(dim) => Some(sql_dimension_type_string(dim)),
-                                    None => match d.measurements.get(column) {
-                                        Some(measurement) => {
-                                            Some(sql_data_type_string(measurement))
-                                        }
-                                        None => None,
-                                    },
-                                })
-                                .next();
-                            match the_type {
-                                Some(t) => {
-                                    return Err(SinkError::MissingColumn(MissingColumn {
-                                        table: table.to_string(),
-                                        column: column.to_string(),
-                                        data_type: t.to_string(),
-                                    }))
-                                }
-                                None => {
-                                    return Err(SinkError::DescribedError(DescribedError {
-                                        message: "Type not foud, can't add column".to_string(),
-                                        inner: postgres_error,
-                                    }))
-                                }
+        let all_column_types = get_all_column_types(&dimension_types, &measurement_types);
+        let all_column_names = get_all_column_names(&dimension_types, &measurement_types);
+
+        let sink: CopyInSink<bytes::Bytes> = match client
+            .copy_in::<String, bytes::Bytes>(&format!(
+                "copy {table_name} ({all_columns}) from stdin with binary",
+                table_name = clean_id(metric),
+                all_columns = all_column_names.join(","),
+            ))
+            .await
+        {
+            Ok(sink) => sink,
+            Err(postgres_error) => match postgres_error.as_db_error() {
+                Some(dberror) => match *dberror.code() {
+                    SqlState::UNDEFINED_COLUMN => {
+                        let pair = UNDEFINED_COLUMN.captures(dberror.message()).unwrap();
+                        let table = pair.name("table").unwrap().as_str();
+                        let column = pair.name("column").unwrap().as_str();
+                        log::info!(
+                            "missing column: {table}.{column}",
+                            table = table,
+                            column = column
+                        );
+                        let the_type = datums
+                            .iter()
+                            .filter_map(|d| match d.dimensions.get(column) {
+                                Some(dim) => Some(sql_dimension_type_string(dim)),
+                                None => match d.measurements.get(column) {
+                                    Some(measurement) => Some(sql_data_type_string(measurement)),
+                                    None => None,
+                                },
+                            })
+                            .next();
+                        match the_type {
+                            Some(t) => {
+                                return Err(SinkError::MissingColumn(MissingColumn {
+                                    table: table.to_string(),
+                                    column: column.to_string(),
+                                    data_type: t.to_string(),
+                                }))
+                            }
+                            None => {
+                                return Err(SinkError::DescribedError(DescribedError {
+                                    message: "Type not foud, can't add column".to_string(),
+                                    inner: postgres_error,
+                                }))
                             }
                         }
-                        SqlState::UNDEFINED_TABLE => {
-                            let table_capture =
-                                UNDEFINED_TABLE.captures(dberror.message()).unwrap();
-                            let table = table_capture.name("table").unwrap().as_str();
-                            log::info!("missing table: {table}", table = table);
+                    }
+                    SqlState::UNDEFINED_TABLE => {
+                        let table_capture = UNDEFINED_TABLE.captures(dberror.message()).unwrap();
+                        let table = table_capture.name("table").unwrap().as_str();
+                        log::info!("missing table: {table}", table = table);
 
-                            return Err(SinkError::MissingTable(MissingTable {
-                                table: table.to_string(),
-                            }));
-                        }
-                        _ => {
-                            return Err(SinkError::Postgres(postgres_error));
-                        }
-                    },
-                    None => return Err(SinkError::Postgres(postgres_error)),
+                        return Err(SinkError::MissingTable(MissingTable {
+                            table: table.to_string(),
+                        }));
+                    }
+                    _ => {
+                        return Err(SinkError::Postgres(postgres_error));
+                    }
                 },
-            };
+                None => return Err(SinkError::Postgres(postgres_error)),
+            },
+        };
 
-            let writer = BinaryCopyInWriter::new(sink, &all_column_types);
-            rows += write_and_close(writer, &dimension_types, &measurement_types, datums).await?;
-        }
-
-        // client.commit().await?;
+        let writer = BinaryCopyInWriter::new(sink, &all_column_types);
+        rows += write_and_close(writer, &dimension_types, &measurement_types, datums).await?;
 
         Ok(rows)
     }
