@@ -33,8 +33,7 @@ impl TypeConverter {
     pub fn get_dimension_type_map(&self, datums: &[Datum]) -> BTreeMap<String, Type> {
         datums
             .iter()
-            .map(|d| d.dimensions.iter())
-            .flatten()
+            .flat_map(|d| d.dimensions.iter())
             .filter_map(|(dimension_name, dimension_value)| {
                 self.dimension_sql_type(dimension_value)
                     .map(|sql_type| (dimension_name.clone(), sql_type))
@@ -45,8 +44,7 @@ impl TypeConverter {
     pub fn get_measurement_type_map(&self, datums: &[Datum]) -> BTreeMap<String, Type> {
         datums
             .iter()
-            .map(|d| d.measurements.iter())
-            .flatten()
+            .flat_map(|d| d.measurements.iter())
             .filter_map(|(measurement_name, measurement_value)| {
                 self.measurement_sql_type(measurement_value)
                     .map(|sql_type| (measurement_name.clone(), sql_type))
