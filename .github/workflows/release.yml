@@ -91,11 +91,11 @@ jobs:
       - name: build
         run: cargo build --release
       - name: tar
-          run: |
-            pushd target/release/
-            tar cvzf goodmetrics-ubuntu.x86_64.tar.gz goodmetrics goodmetricsd
-            popd
-            mv target/release/goodmetrics-ubuntu.x86_64.tar.gz ./
+        run: |
+          pushd target/release/
+          tar cvzf goodmetrics-ubuntu.x86_64.tar.gz goodmetrics goodmetricsd
+          popd
+          mv target/release/goodmetrics-ubuntu.x86_64.tar.gz ./
       - name: Upload client artifact
         uses: actions/upload-artifact@v2
         with:
