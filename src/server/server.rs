@@ -85,7 +85,7 @@ fn main() {
     env_logger::Builder::from_env(
         env_logger::Env::default()
             .default_filter_or(&args.log_level)
-            .default_write_style_or("always"),
+            .default_write_style_or(&args.log_level),
     )
     .init();
 
@@ -143,7 +143,7 @@ async fn consume(
     args_shared: Arc<Options>,
     receive_queue: MetricsReceiveQueue,
 ) -> Result<(), SinkError> {
-    let mut sender =
+    let sender =
         match PostgresSender::new_connection(&args_shared.connection_string, receive_queue).await {
             Ok(sender) => sender,
             Err(e) => {

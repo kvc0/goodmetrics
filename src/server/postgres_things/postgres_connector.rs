@@ -31,7 +31,7 @@ impl PostgresConnector {
     }
 
     pub async fn use_connection(
-        &mut self,
+        &self,
     ) -> Result<bb8::PooledConnection<'_, PostgresConnectionManager<NoTls>>, SinkError> {
         // need to get the connection via the method that ensures it's connected
         let poolconn = match self.pool.get().await {

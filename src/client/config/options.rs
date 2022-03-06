@@ -20,7 +20,7 @@ pub(crate) struct Options {
     pub config_file: String,
     #[structopt(long, default_value = "https://localhost:9573")]
     pub goodmetrics_server: String,
-    #[structopt(long, default_value = "debug")]
+    #[structopt(long, default_value = "info")]
     pub log_level: String,
 
     #[structopt(subcommand)]

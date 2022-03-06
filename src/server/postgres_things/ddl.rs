@@ -7,12 +7,12 @@ lazy_static! {
 }
 
 pub async fn add_column(
-    transaction: &Client,
+    client: &Client,
     table_name: &str,
     column_name: &str,
     data_type: &str,
 ) -> Result<(), tokio_postgres::Error> {
-    transaction
+    client
         .batch_execute(&format!(
             "alter table {table} add column {column} {data_type}",
             table = table_name,

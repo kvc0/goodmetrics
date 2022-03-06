@@ -2,6 +2,7 @@ use std::{
     collections::BTreeMap,
     error::Error,
     fmt::Display,
+    rc::Rc,
     time::{Duration, SystemTime},
 };
 
@@ -15,16 +16,19 @@ use crate::{
     },
     proto::metrics::pb::{dimension, measurement, Datum, Dimension, Measurement},
 };
+use bb8::PooledConnection;
+use bb8_postgres::PostgresConnectionManager;
 use futures::pin_mut;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use regex::Regex;
 use thiserror::Error;
+use tokio::task;
 use tokio_postgres::{
     binary_copy::BinaryCopyInWriter,
     error::SqlState,
     types::{ToSql, Type, WrongType},
-    CopyInSink, GenericClient,
+    CopyInSink, GenericClient, NoTls,
 };
 
 use super::metricssendqueue::MetricsReceiveQueue;
@@ -122,7 +126,7 @@ impl PostgresSender {
         rx: MetricsReceiveQueue,
     ) -> Result<PostgresSender, SinkError> {
         log::debug!("new_connection: {:?}", connection_string);
-        let max_conns = 8;
+        let max_conns = 16;
         let mut connector =
             PostgresConnector::new(connection_string.to_string(), max_conns).await?;
 
@@ -142,49 +146,101 @@ impl PostgresSender {
         })
     }
 
-    pub async fn consume_stuff(&mut self) -> Result<u32, SinkError> {
+    pub async fn consume_stuff(mut self) -> Result<u32, SinkError> {
         log::info!("started consumer");
+        let connector = Rc::new(self.connector);
+        let type_converter = Rc::new(self.type_converter);
 
         while let Some(batch) = self.rx.recv().await {
-            let grouped_metrics = group_metrics(&batch);
-            log::info!(
-                "Received some metrics. size: {}, metrics: {}",
-                batch.len(),
-                grouped_metrics.len()
-            );
+            let batch_tasks = task::LocalSet::new();
 
-            for (metric, datums) in grouped_metrics.iter() {
-                let mut try_again = true;
-                while try_again {
-                    try_again = match self.run_a_batch(metric, datums).await {
-                        Ok(rows) => {
-                            log::info!("committed rows: {rows}", rows = rows);
+            let batch_connector = connector.clone();
+            let batch_type_converter = type_converter.clone();
+            batch_tasks
+                .run_until(async move {
+                    let batchlen = batch.len();
+                    let grouped_metrics = group_metrics(batch);
+                    log::info!(
+                        "Received some metrics. size: {}, metrics: {}",
+                        batchlen,
+                        grouped_metrics.len()
+                    );
 
-                            false
-                        }
-                        Err(e) => match self.handle_error_and_should_it_retry(e).await {
+                    for (metric, datums) in grouped_metrics.into_iter() {
+                        //batch_tasks.spawn_local(future);
+                        //batch_tasks.spawn_local(async move {
+                        // PostgresSender::send_some(&mut self.connector, &self.type_converter, metric, datums).await?
+                        task::spawn_local(PostgresSender::send_some(
+                            batch_connector.clone(),
+                            batch_type_converter.clone(),
+                            metric,
+                            datums,
+                        ));
+                    }
+                })
+                .await;
+
+            batch_tasks.await;
+        }
+        log::info!("ended consumer");
+        Ok(1)
+    }
+
+    async fn send_some(
+        connector: Rc<PostgresConnector>,
+        type_converter: Rc<TypeConverter>,
+        metric: String,
+        datums: Vec<Datum>,
+    ) -> Result<(), SinkError> {
+        let mut try_again = true;
+        while try_again {
+            let connection = match connector.use_connection().await {
+                Ok(connection) => connection,
+                Err(error) => {
+                    log::error!(
+                        "Dropping metrics because I can't get a connection: {:?}",
+                        error
+                    );
+                    continue;
+                }
+            };
+            try_again =
+                match PostgresSender::run_a_batch(&connection, &type_converter, &metric, &datums)
+                    .await
+                {
+                    Ok(rows) => {
+                        log::info!("committed rows: {rows}", rows = rows);
+
+                        false
+                    }
+                    Err(e) => {
+                        drop(connection);
+                        let connection = connector.use_connection().await?;
+                        match PostgresSender::handle_error_and_should_it_retry(&connection, e).await
+                        {
                             Ok(should_retry) => should_retry,
                             Err(retry_failure) => {
                                 log::error!("failed to handle error: {:?}", retry_failure);
 
                                 false
                             }
-                        },
+                        }
                     }
                 }
-            }
         }
-        log::info!("ended consumer");
-        Ok(1)
+        Ok(())
     }
 
-    async fn run_a_batch(&mut self, metric: &str, datums: &[&Datum]) -> Result<usize, SinkError> {
-        let client = self.connector.use_connection().await?;
-
+    async fn run_a_batch(
+        client: &PooledConnection<'_, PostgresConnectionManager<NoTls>>,
+        type_converter: &TypeConverter,
+        metric: &str,
+        datums: &[Datum],
+    ) -> Result<usize, SinkError> {
         let mut rows = 0;
 
-        let dimension_types = self.type_converter.get_dimension_type_map(datums);
-        let measurement_types = self.type_converter.get_measurement_type_map(datums);
+        let dimension_types = type_converter.get_dimension_type_map(datums);
+        let measurement_types = type_converter.get_measurement_type_map(datums);
 
         let all_column_types = get_all_column_types(&dimension_types, &measurement_types);
         let all_column_names = get_all_column_names(&dimension_types, &measurement_types);
@@ -258,7 +314,10 @@ impl PostgresSender {
         Ok(rows)
     }
 
-    async fn handle_error_and_should_it_retry(&mut self, e: SinkError) -> Result<bool, SinkError> {
+    async fn handle_error_and_should_it_retry(
+        connection: &PooledConnection<'_, PostgresConnectionManager<NoTls>>,
+        e: SinkError,
+    ) -> Result<bool, SinkError> {
         return match e {
             SinkError::Postgres(postgres_error) => match postgres_error.as_db_error() {
                 Some(dberror) => match *dberror.code() {
@@ -295,7 +354,15 @@ impl PostgresSender {
             },
             SinkError::MissingColumn(what_column) => {
                 log::info!("adding missing column {:?}", what_column);
-                let connection = self.connector.use_connection().await?;
+                match connection.client().simple_query("select 1").await {
+                    Ok(_) => {
+                        log::info!("using connection for dml")
+                    }
+                    Err(e) => {
+                        log::info!("connection is hosed: {:?}", e)
+                    }
+                }
+
                 ddl::add_column(
                     connection.client(),
                     &what_column.table,
@@ -308,7 +375,6 @@ impl PostgresSender {
             }
             SinkError::MissingTable(what_table) => {
                 log::info!("adding missing table {:?}", what_table);
-                let connection = self.connector.use_connection().await?;
                 ddl::create_table(connection.client(), &what_table.table).await?;
 
                 Ok(true)
@@ -323,7 +389,7 @@ async fn write_and_close(
     writer: BinaryCopyInWriter,
     dimensions: &BTreeMap<String, Type>,
     measurements: &BTreeMap<String, Type>,
-    data: &[&Datum],
+    data: &[Datum],
 ) -> Result<usize, SinkError> {
     pin_mut!(writer);
     log::debug!("writing {} rows", data.len());
@@ -355,8 +421,10 @@ async fn write_and_close(
             let measurement = &datum.measurements[measurement_name];
             if let Some(value) = measurement.value.as_ref() {
                 row.push(match value {
-                    measurement::Value::Inumber(i) => Box::new(i),
-                    measurement::Value::Fnumber(f) => Box::new(f),
+                    measurement::Value::I64(i) => Box::new(i),
+                    measurement::Value::I32(i) => Box::new(i),
+                    measurement::Value::F64(f) => Box::new(f),
+                    measurement::Value::F32(f) => Box::new(f),
                     // measurement::Value::StatisticSet(s) => Box::new((s.minimum, s.maximum, s.samplesum, s.samplecount)),
                     measurement::Value::StatisticSet(s) => Box::new(s),
                     measurement::Value::Histogram(h) => Box::new(h.to_stupidmap()),
@@ -395,21 +463,24 @@ fn get_all_column_names(
     all_column_types
 }
 
-fn group_metrics<'a>(batch: &'a [Datum]) -> BTreeMap<&'a String, Vec<&Datum>> {
-    let grouped_metrics: BTreeMap<&String, Vec<&Datum>> = batch
-        .iter()
-        .sorted_by_key(|d| &d.metric)
-        .group_by(|d| &d.metric)
+fn group_metrics(batch: Vec<Datum>) -> BTreeMap<String, Vec<Datum>> {
+    let grouped_metrics: BTreeMap<String, Vec<Datum>> = batch
         .into_iter()
-        .map(|(metric, datums_iterable)| (metric, datums_iterable.collect_vec()))
+        // TODO: fix string copying here
+        .sorted_by_key(|d| d.metric.clone())
+        .group_by(|d| d.metric.clone())
+        .into_iter()
+        .map(|(metric, datums_iterable)| (metric, datums_iterable.collect::<Vec<Datum>>()))
         .collect();
     grouped_metrics
 }
 
 fn sql_data_type_string(measurement: &Measurement) -> &'static str {
     match measurement.value.as_ref().unwrap() {
-        measurement::Value::Inumber(_) => "int8",
-        measurement::Value::Fnumber(_) => "float8",
+        measurement::Value::I64(_) => "int8",
+        measurement::Value::I32(_) => "int4",
+        measurement::Value::F64(_) => "float8",
+        measurement::Value::F32(_) => "float4",
         measurement::Value::StatisticSet(_) => "statistic_set",
         measurement::Value::Histogram(_) => "histogram",
     }

@@ -4,6 +4,7 @@ use postgres_types::Type;
 
 use crate::proto::metrics::pb::{dimension, measurement, Datum, Dimension, Measurement};
 
+#[derive(Clone)]
 pub struct TypeConverter {
     pub statistic_set_type: Type,
     pub histogram_type: Type,
@@ -12,8 +13,10 @@ pub struct TypeConverter {
 impl TypeConverter {
     pub fn measurement_sql_type(&self, measurement: &Measurement) -> Option<Type> {
         measurement.value.as_ref().map(|v| match v {
-            measurement::Value::Inumber(_) => Type::INT8,
-            measurement::Value::Fnumber(_) => Type::FLOAT8,
+            measurement::Value::I64(_) => Type::INT8,
+            measurement::Value::I32(_) => Type::INT4,
+            measurement::Value::F64(_) => Type::FLOAT8,
+            measurement::Value::F32(_) => Type::FLOAT4,
             measurement::Value::StatisticSet(_) => self.statistic_set_type.clone(),
             measurement::Value::Histogram(_) => Type::JSONB,
         })
@@ -27,7 +30,7 @@ impl TypeConverter {
         })
     }
 
-    pub fn get_dimension_type_map(&self, datums: &[&Datum]) -> BTreeMap<String, Type> {
+    pub fn get_dimension_type_map(&self, datums: &[Datum]) -> BTreeMap<String, Type> {
         datums
             .iter()
             .map(|d| d.dimensions.iter())
@@ -39,7 +42,7 @@ impl TypeConverter {
             .collect()
     }
 
-    pub fn get_measurement_type_map(&self, datums: &[&Datum]) -> BTreeMap<String, Type> {
+    pub fn get_measurement_type_map(&self, datums: &[Datum]) -> BTreeMap<String, Type> {
         datums
             .iter()
             .map(|d| d.measurements.iter())

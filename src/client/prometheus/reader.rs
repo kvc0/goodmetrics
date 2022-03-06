@@ -160,7 +160,7 @@ fn read_a_thing(measurement_name: &str, line: &str, unix_nanos: u64) -> Option<D
     datum.measurements.insert(
         "value".to_string(),
         Measurement {
-            value: Some(measurement::Value::Fnumber(number)),
+            value: Some(measurement::Value::F64(number)),
         },
     );
 
