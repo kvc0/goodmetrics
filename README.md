@@ -11,7 +11,10 @@ This is the way (to record metrics)
 | int_dimension             | int8/bigint   | A 64 bit integer |
 | str_dimension             | text          | A label |
 | bool_dimension            | boolean       | A flag |
-| gauge_measurement         | float8        | Snapshot of a value |
+| i64                       | int8/bigint   | A 64 bit integer |
+| i32                       | int4/int      | A 32 bit integer |
+| f64                       | float8        | A 64 bit floating point number |
+| f32                       | float4        | A 32 bit floating point number |
 | statistic_set_measurement | statistic_set | A preaggregated {min,max,sum,count} rollup of some value. Has convenience functions for graphing and rollups. |
 | histogram_measurement     | histogram     | Implemented as jsonb. Has convenience functions for graphing and rollups. |
 
