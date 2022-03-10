@@ -55,16 +55,11 @@ fn decode_prometheus(body: String, now_nanos: u64, table_prefix: &str) -> Vec<Da
 }
 
 fn read_summary(measurement_name: &str, line: &str, unix_nanos: u64) -> Option<Datum> {
-    // You should not use summaries. They are awful. Fuck prometheus for leading you astray.
+    // You should not use summaries. They are awful. Shame on Prometheus for leading you astray.
     read_a_thing(measurement_name, line, unix_nanos)
 }
 
 fn read_histogram(measurement_name: &str, line: &str, unix_nanos: u64) -> Option<Datum> {
-    // ideally would report a goodmetrics histogram but prometheus histograms can have
-    // cumulative buckets or not. Since I dont really know what kind of histogram this
-    // is and a goodmerics histogram is always the non-stupid (that is, bucketed) flavor
-    // of histogram, I'm leaving this as a basic list of regular metrics.
-    // In case it's not clear by now, fuck prometheus.
     read_a_thing(measurement_name, line, unix_nanos)
 }
 
@@ -107,7 +102,17 @@ fn read_a_thing(measurement_name: &str, line: &str, unix_nanos: u64) -> Option<D
             }
             let c = maybe_c.unwrap();
             match tagstate {
-                // why, prometheus people, why... did you forget that json exists?
+                // why, prometheus people, why... did you forget that json exists? I mean you knew at
+                // one point and somehow decided that rolling your own was better?
+                // https://www.youtube.com/watch?v=4DzoajMs4DM&t=719s
+                // This video is hilarious. A perfect demonstration of poor decision making by a
+                // community! "You usually have to parse the entire request body with json[...]"
+                // and zero people taught this fellow that ndjson exists. Just astounding that the
+                // prometheus line protocol was allowed to get to this point.
+                // Rolling one's own ascii protocol in the modern world is not an act that should
+                // be undertaken lightly. Json parsers have had tremendous effort placed on speed
+                // and efficiency. Protocol buffers <exists>. Choosing an alternative like this
+                // prometheus text line protocol is the worst possible choice in this age.
                 TagReadState::Name => {
                     if c == '=' {
                         chars.next(); // Discard leading "
@@ -120,7 +125,7 @@ fn read_a_thing(measurement_name: &str, line: &str, unix_nanos: u64) -> Option<D
                     }
                 }
                 TagReadState::Value => {
-                    // All prometheus tags are strings because fuck prometheus.
+                    // All prometheus tags are strings because what else could you ever possibly want...
                     if c == '"' {
                         datum.dimensions.insert(
                             tag_name,
@@ -148,7 +153,7 @@ fn read_a_thing(measurement_name: &str, line: &str, unix_nanos: u64) -> Option<D
     }
     // Here, we've named the datum and put whatever dimensions it has into it.
     // All that's left is the value and an optional timestamp but I don't use
-    // the optional timestamp because fuck prometheus.
+    // the optional timestamp because.
     let number_string: String = chars.take_while(|c| *c != ' ').collect();
     let number: f64 = number_string.parse().unwrap_or_else(|err| {
         log::error!("bad number format in line. Error: {}, line: {}", err, line);
