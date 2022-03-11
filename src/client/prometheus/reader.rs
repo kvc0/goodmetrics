@@ -1,13 +1,17 @@
-use std::str::Chars;
+use std::{collections::HashMap, str::Chars};
 
 use lazy_static::lazy_static;
 use regex::Regex;
 
-use crate::metrics::{dimension, measurement, Datum, Dimension, Measurement};
+use crate::metrics::{self, dimension, measurement, Datum, Dimension, Measurement};
 
 lazy_static! {
     // # TYPE go_memstats_alloc_bytes gauge
-    static ref MEASUREMENT_TYPE: Regex = Regex::new(r#"^# TYPE (?P<measurement>[\w_]+) (?P<type>[\w]+)$"#).unwrap();
+    static ref MEASUREMENT_TYPE: Regex = Regex::new(r#"^# TYPE (?P<measurement>\w+) (?P<type>[\w]+)$"#).unwrap();
+    static ref MEASUREMENT_NAME: Regex = Regex::new(r#"^(?P<measurement>\w+)"#).unwrap();
+
+    // http_request_duration_seconds_bucket{le="0.05"} 24054
+    static ref HISTOGRAM_BUCKET: Regex = Regex::new(r#"\{.*le="(?P<le_bucket>[^"])".*\}\s*(?P<count>\d+)"#).unwrap();
 }
 
 pub async fn read_prometheus(
@@ -23,10 +27,11 @@ fn decode_prometheus(body: String, now_nanos: u64, table_prefix: &str) -> Vec<Da
     let mut parse_state = ParseState::LookingForType;
     let mut measurement_name: &str = "";
     let mut datums: Vec<Datum> = vec![];
+    let mut partial_datum: Option<Datum> = None;
 
     for line in body.lines() {
         log::trace!("{:?}", line);
-        let parse_function = match parse_state {
+        let parse_function: fn(&str, &str, u64, Option<Datum>) -> LineState = match parse_state {
             ParseState::LookingForType => {
                 let (pstate, mname) = look_for_type(line);
                 measurement_name = mname;
@@ -38,7 +43,12 @@ fn decode_prometheus(body: String, now_nanos: u64, table_prefix: &str) -> Vec<Da
             ParseState::ReadingHistogram => read_histogram,
             ParseState::ReadingSummary => read_summary,
         };
-        match parse_function(measurement_name, line, now_nanos) {
+        let line_state = parse_function(measurement_name, line, now_nanos, partial_datum.take());
+        if let Some(partial) = line_state.partial_datum {
+            partial_datum = Some(partial);
+            continue;
+        }
+        match line_state.complete_datum {
             Some(mut datum) => {
                 datum.metric = format!("{}{}", table_prefix, datum.metric);
                 log::trace!("datum: {:?}", datum);
@@ -54,26 +64,56 @@ fn decode_prometheus(body: String, now_nanos: u64, table_prefix: &str) -> Vec<Da
     datums
 }
 
-fn read_summary(measurement_name: &str, line: &str, unix_nanos: u64) -> Option<Datum> {
+struct LineState {
+    pub complete_datum: Option<Datum>,
+    pub partial_datum: Option<Datum>,
+}
+
+fn read_summary(
+    measurement_name: &str,
+    line: &str,
+    unix_nanos: u64,
+    _partial: Option<Datum>,
+) -> LineState {
     // You should not use summaries. They are awful. Shame on Prometheus for leading you astray.
-    read_a_thing(measurement_name, line, unix_nanos)
+    LineState {
+        complete_datum: read_a_thing(measurement_name, line, unix_nanos),
+        partial_datum: None,
+    }
 }
 
-fn read_histogram(measurement_name: &str, line: &str, unix_nanos: u64) -> Option<Datum> {
-    read_a_thing(measurement_name, line, unix_nanos)
+fn read_counter(
+    measurement_name: &str,
+    line: &str,
+    unix_nanos: u64,
+    _partial: Option<Datum>,
+) -> LineState {
+    LineState {
+        complete_datum: read_a_thing(measurement_name, line, unix_nanos),
+        partial_datum: None,
+    }
 }
 
-fn read_counter(measurement_name: &str, line: &str, unix_nanos: u64) -> Option<Datum> {
-    read_a_thing(measurement_name, line, unix_nanos)
-}
-
-fn read_gauge(measurement_name: &str, line: &str, unix_nanos: u64) -> Option<Datum> {
-    read_a_thing(measurement_name, line, unix_nanos)
+fn read_gauge(
+    measurement_name: &str,
+    line: &str,
+    unix_nanos: u64,
+    _partial: Option<Datum>,
+) -> LineState {
+    LineState {
+        complete_datum: read_a_thing(measurement_name, line, unix_nanos),
+        partial_datum: None,
+    }
 }
 
 fn read_a_thing(measurement_name: &str, line: &str, unix_nanos: u64) -> Option<Datum> {
-    if !line.starts_with(measurement_name) {
-        return None;
+    match MEASUREMENT_NAME.captures(line) {
+        Some(capture) => {
+            if capture.name("measurement").unwrap().as_str() != measurement_name {
+                return None;
+            }
+        }
+        None => return None,
     }
 
     // FIXME: Need to make a DatumFactory and pass it through so I can do host dimensions
@@ -240,4 +280,121 @@ enum ParseState {
     ReadingCounter,
     ReadingHistogram,
     ReadingSummary,
+}
+
+// here's the bs histogram format; i have no idea if it is supposed to support dimensions other than le,
+// which is of course a terrible way to model a histogram. This format was a spectacularly bad idea.
+// # TYPE http_request_duration_seconds histogram
+// http_request_duration_seconds_bucket{le="0.05"} 24054
+// http_request_duration_seconds_bucket{le="0.1"} 33444
+// http_request_duration_seconds_bucket{le="0.2"} 100392
+// http_request_duration_seconds_bucket{le="0.5"} 129389
+// http_request_duration_seconds_bucket{le="1"} 133988
+// http_request_duration_seconds_bucket{le="+Inf"} 144320
+// http_request_duration_seconds_sum 53423
+// http_request_duration_seconds_count 144320
+fn read_histogram(
+    measurement_name: &str,
+    line: &str,
+    unix_nanos: u64,
+    partial: Option<Datum>,
+) -> LineState {
+    let mut datum = match partial {
+        Some(p) => p,
+        None => Datum {
+            metric: measurement_name.to_string(),
+            unix_nanos,
+            measurements: HashMap::from([(
+                "value".to_string(),
+                Measurement {
+                    value: Some(measurement::Value::Histogram(metrics::Histogram {
+                        buckets: HashMap::new(),
+                    })),
+                },
+            )]),
+            ..Default::default()
+        },
+    };
+    return if line.starts_with(&format!("{}_bucket{{", measurement_name)) {
+        let v = datum.measurements.get_mut("value");
+        let histogram = match v.unwrap().value.as_mut().unwrap() {
+            measurement::Value::Histogram(h) => h,
+            _ => {
+                log::error!("Bad histogram type in datum {:?}", datum);
+                return LineState {
+                    complete_datum: None,
+                    partial_datum: None,
+                };
+            }
+        };
+        match HISTOGRAM_BUCKET.captures(line) {
+            Some(capture) => {
+                let bucket_str = match capture.name("le_bucket") {
+                    Some(b) => b.as_str(),
+                    None => {
+                        return LineState {
+                            complete_datum: None,
+                            partial_datum: None,
+                        }
+                    }
+                };
+                let raw_count: i64 = match capture.name("count") {
+                    Some(c) => c.as_str().parse::<i64>().unwrap_or(0),
+                    None => {
+                        return LineState {
+                            complete_datum: None,
+                            partial_datum: None,
+                        }
+                    }
+                };
+                let raw_bucket: f64 = match bucket_str.parse() {
+                    Ok(b) => b,
+                    Err(e) => {
+                        log::error!("bad histogram bucket line: {}, {:?}", line, e);
+                        return LineState {
+                            complete_datum: None,
+                            partial_datum: None,
+                        };
+                    }
+                };
+                let values_below_bucket: i64 = histogram
+                    .buckets
+                    .iter()
+                    .map(|(k, v)| if (*k as f64) < raw_bucket { *v } else { 0 })
+                    .sum();
+
+                let actual_count = raw_count - values_below_bucket;
+                let actual_bucket = raw_bucket.ceil() as i64;
+                let bucket_value = histogram
+                    .buckets
+                    .remove(&actual_bucket)
+                    .map_or(actual_count, |v| v + actual_count);
+                histogram.buckets.insert(actual_bucket, bucket_value);
+                LineState {
+                    complete_datum: None,
+                    partial_datum: Some(datum),
+                }
+            }
+            None => LineState {
+                complete_datum: None,
+                partial_datum: None,
+            },
+        }
+    } else {
+        // if line.starts_with(&format!("{}_sum", measurement_name))
+        // then we'll guess that it's the sum thing from the histogram.
+        // goodmetrics histograms are for distributions though, so we
+        // don't really care about the raw sum.
+
+        // if line.starts_with(&format!("{}_count", measurement_name))
+        // i mean, the histogram already has the raw count... c'mon prometheus...
+
+        // else
+        // Maybe there was no sum or count? I dunno, the line protocol is not
+        // well-specified.
+        LineState {
+            complete_datum: Some(datum),
+            partial_datum: None,
+        }
+    };
 }
