@@ -151,7 +151,15 @@ impl PostgresSender {
         let connector = Rc::new(self.connector);
         let type_converter = Rc::new(self.type_converter);
 
-        while let Some(batch) = self.rx.recv().await {
+        while let Some(mut batch) = self.rx.recv().await {
+            log::info!("Sender woke. Trying to collect a batch...");
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            let mut api_calls = 1;
+            while let Ok(mut extras) = self.rx.rx.try_recv() {
+                api_calls += 1;
+                batch.append(&mut extras);
+            }
+
             let batch_tasks = task::LocalSet::new();
 
             let batch_connector = connector.clone();
@@ -161,15 +169,13 @@ impl PostgresSender {
                     let batchlen = batch.len();
                     let grouped_metrics = group_metrics(batch);
                     log::info!(
-                        "Received some metrics. size: {}, metrics: {}",
+                        "Sending some metrics. batch size: {}, metrics: {}, api calls: {}",
                         batchlen,
-                        grouped_metrics.len()
+                        grouped_metrics.len(),
+                        api_calls,
                     );
 
                     for (metric, datums) in grouped_metrics.into_iter() {
-                        //batch_tasks.spawn_local(future);
-                        //batch_tasks.spawn_local(async move {
-                        // PostgresSender::send_some(&mut self.connector, &self.type_converter, metric, datums).await?
                         task::spawn_local(PostgresSender::send_some(
                             batch_connector.clone(),
                             batch_type_converter.clone(),
