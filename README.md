@@ -5,22 +5,26 @@ This is the way (to record metrics)
 
 # Data model
 
-| Column                    | type          | about  |
-| :-----:                   | :--:          | ---    |
-| `time`                    | timestamptz   | The 1 required column, used as the time column for hypertables. It is provided by Good Metrics |
-| int_dimension             | int8/bigint   | A 64 bit integer |
-| str_dimension             | text          | A label |
-| bool_dimension            | boolean       | A flag |
-| i64                       | int8/bigint   | A 64 bit integer |
-| i32                       | int4/int      | A 32 bit integer |
-| f64                       | float8        | A 64 bit floating point number |
-| f32                       | float4        | A 32 bit floating point number |
-| statistic_set_measurement | statistic_set | A preaggregated {min,max,sum,count} rollup of some value. Has convenience functions for graphing and rollups. |
-| histogram_measurement     | histogram     | Implemented as jsonb. Has convenience functions for graphing and rollups. |
+| Goodmetrics type          | Timescale type | about  |
+| :-----:                   | :--:           | ---    |
+| `time`                    | timestamptz    | The 1 required column, used as the time column for hypertables. It is provided by Good Metrics |
+| int_dimension             | int8/bigint    | A 64 bit integer |
+| str_dimension             | text           | A label |
+| bool_dimension            | boolean        | A flag |
+| i64                       | int8/bigint    | A 64 bit integer |
+| i32                       | int4/int       | A 32 bit integer |
+| f64                       | float8         | A 64 bit floating point number |
+| f32                       | float4         | A 32 bit floating point number |
+| statistic_set_measurement | statistic_set  | A preaggregated {min,max,sum,count} rollup of some value. Has convenience functions for graphing and rollups. |
+| histogram_measurement     | histogram      | Implemented as jsonb. Has convenience functions for graphing and rollups. |
 
 # Overview
 ## About
 Good Metrics is a metrics pipeline especially suited for application metrics.
+
+Record _workflows_ not _numbers_. Instead of doing ceremony to conform your workflows to emit interesting data, just record when interesting events
+happen at the point of their occurrence and move on. Good Metrics creates a wide schema for your application workflow, with a column per dimension
+and a column per measurement.
 
 ### On healing
 Good Metrics self-heals.
@@ -29,12 +33,85 @@ When you have bad data or if someone messes stuff up or whatever - just `drop ta
 If you change a column's data type (illegal) and you didn't change the name, just `alter table problematic_table drop column problematic_column`. It
 will recreate with the currently-reported type. Failures to self-heal from missing data are bugs; please report them!
 
-## Other upstreams
-It can be used with other metrics upstreams as well, however. If you have some legacy Prometheus component, you can poll it and send data to Timescale.
-For example, you might emit metrics from a `node_exporter` & poll it via `goodmetrics poll-prometheus node`.
-You'd then have tables in Timescale per metric with `1` row per host per poll interval, and a column per dimension/tag. Storing this way you can graph
-your Prometheus metrics really deeply in Grafana. For example, to look at the cpu utilization of your servers with the top 10 highest network out
-traffic you might do something like:
+# Clients
+* [Kotlin](https://github.com/WarriorOfWire/goodmetrics_kotlin)
+* JSON CLI: `goodmetrics` included in this release. `send-metrics` receives json strings.
+* Prometheus: `goodmetrics` included in this release. `poll-prometheus` avoid using prometheus when you have other choices.
+## JSON CLI
+You can shove json into the `goodmetrics` application. You can pass as many Datum blobs in as you want. For example:
+```
+goodmetrics send '{
+  "metric":"mm",
+  "unix_nanos":1642367609000000000,
+  "dimensions":{
+    "a_string_dimension":{"value":{"String":"asdf"}},
+    "an_integer_dimension":{"value":{"Number":16}},
+    "a_boolean_dimension":{"value":{"Boolean":true}}
+  },
+  "measurements":{
+    "an_int_measurement":{"value":{"I32":42}},
+    "a_long_measurement":{"value":{"I64":42}},
+    "a_float_measurement":{"value":{"F32":42.42}},
+    "a_double_measurement":{"value":{"F64":42.42}},
+    "a_statistic_set":{"value":{"StatisticSet": {"minimum":1, "maximum":2, "samplesum":8, "samplecount":6}}},
+    "a_histogram":{"value":{"Histogram":{"buckets":{"1":2, "3":4, "5":6}}}}
+  }
+}' '{
+  "metric":"mm",
+  "unix_nanos":1642367704000000000,
+  "dimensions":{
+    "a_string_dimension":{"value":{"String":"asdf"}},
+    "an_integer_dimension":{"value":{"Number":16}},
+    "a_boolean_dimension":{"value":{"Boolean":true}}
+  },
+  "measurements":{
+    "an_int_measurement":{"value":{"I32":42}},
+    "a_long_measurement":{"value":{"I64":42}},
+    "a_float_measurement":{"value":{"F32":42.42}},
+    "a_double_measurement":{"value":{"F64":42.42}},
+    "a_statistic_set":{"value":{"StatisticSet": {"minimum":1, "maximum":2, "samplesum":8, "samplecount":6}}},
+    "a_histogram":{"value":{"Histogram":{"buckets":{"1":2, "3":4, "5":6}}}}
+  }
+}'
+```
+Streaming is an option but hasn't seemed like a priority yet.
+
+## Prometheus
+If you have some legacy Prometheus component, you can poll it and send data to Timescale. For example, you might emit metrics from a `node_exporter`
+& poll it via `goodmetrics poll-prometheus node`. You'd then have tables in Timescale per metric with 1 row per host per metric & dimension position
+per poll interval, and a column per dimension/tag.
+```
+goodmetrics poll-prometheus --help
+Poll prometheus metrics
+
+USAGE:
+    goodmetrics poll-prometheus [OPTIONS] <prefix> [poll-endpoint]
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+OPTIONS:
+        --bonus-dimensions <bonus-dimensions>     [default: {}]
+            ex: '{"a_dimension_name": {"value": {"String": "a string dimension value"}} }'
+        --interval-seconds <interval-seconds>     [default: 10]
+
+ARGS:
+    <prefix>
+    <poll-endpoint>     [default: http://127.0.0.1:9100/metrics]
+```
+
+### Prometheus -> Goodmetrics type mapping
+
+| Prometheus type          | Goodmetrics type  | about  |
+| :-----:                  | :--:              | ---    |
+| counter                  | f64               | All counters are treated as f64 |
+| gauge                    | f64               | Gauges are just f64 |
+| untyped                  | f64               | We just treat untyped like gauge |
+| histogram                | histogram         | These are translated to "sensible histograms" from "bonkers le prometheus histograms" |
+| summary                  | f64               | Treated like gauges. These are awful and you shoud never use them if you can possibly use histograms instead |
+
+Example grafana query:
 ```sql
 with top_10_by_net_out_bytes as (
   select hostname from node_net_out_bytes where time > now() - interval '3 hours'
@@ -48,16 +125,9 @@ where
   and hostname in (select hostname from top_10_by_net_out_bytes)
 order by time
 ```
-No funny stuff, just a common table expression (CTE) to make the query read nicely and a couple simple conditions.
 
 ## Pictures
 ![general overview of deployment shape](https://user-images.githubusercontent.com/3454741/153928842-44b5eb0e-74b1-4e48-9f49-0db1d0490e57.svg)
-
-
-# Clients
-* [Kotlin](https://github.com/WarriorOfWire/goodmetrics_kotlin)
-* JSON CLI: `goodmetrics` included in this release. `send-metrics` receives json strings.
-* Prometheus: `goodmetrics` included in this release. `poll-prometheus` avoid using this when you have other choices.
 
 # Development
 Both rustfmt and clippy are checked on PR. This repo currently treats all clippy lint violations as errors.
@@ -105,8 +175,8 @@ You don't have to but it's an option if you don't want a massive database.
 
 Not only that, your data remains related. You can pivot your measurements
 by any dimension or value threshold, because you are standing on the shoulders
-of decades of great minds investing in SQL. It might sound sexy to reinvent
-data storage, but most of the time... "good" is best.
+of decades of great minds investing in PostgresQL. It might sound sexy to
+reinvent time series data storage, but most of the time... "good" is best.
 
 ## Not perfect huh?
 You could make every single stack in your application a unit of work and emit
@@ -124,8 +194,6 @@ low or your budget is immense, it's a very powerful way to observe a system.
 Good Metrics units of work are more like a trace with only 1 level - and no
 intermediate filter server. Good Metrics can be pre-aggregated on the reporting
 server as well, to keep row rate very low and dashboards maximally responsive.
-If you can understand what to do with a `map<Name, Dimension|Measurement>` you
-can understand what to do with Good Metrics.
 
 # About
 ## General - White box metrics
