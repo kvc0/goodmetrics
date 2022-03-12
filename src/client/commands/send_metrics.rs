@@ -6,7 +6,7 @@ use super::client_connection::get_client;
 
 pub async fn send_metrics(metrics: Vec<Datum>, endpoint: &str) {
     for metric in &metrics {
-        log::info!("parsed: {}", serde_json::to_string_pretty(&metric).unwrap());
+        log::debug!("parsed: {}", serde_json::to_string_pretty(&metric).unwrap());
     }
 
     let mut client = match get_client(endpoint).await {
