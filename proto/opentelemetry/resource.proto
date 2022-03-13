@@ -14,7 +14,7 @@
 
 syntax = "proto3";
 
-package opentelemetry.proto.resource.v1;
+package opentelemetry.proto.resource;
 
 import "common.proto";
 
@@ -28,7 +28,7 @@ message Resource {
   // Set of attributes that describe the resource.
   // Attribute keys MUST be unique (it is not allowed to have more than one
   // attribute with the same key).
-  repeated opentelemetry.proto.common.v1.KeyValue attributes = 1;
+  repeated opentelemetry.proto.common.KeyValue attributes = 1;
 
   // dropped_attributes_count is the number of dropped attributes. If the value is 0, then
   // no attributes were dropped.

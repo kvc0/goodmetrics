@@ -20,9 +20,12 @@ fn main() {
 
     tonic_build::configure()
         .build_server(false)
-        .type_attribute(".", "#[derive(Debug)]")
+        // .type_attribute(".", "#[derive(Debug)]")
         .compile(
-            &["proto/opentelemetry/metrics.proto"],
+            &[
+                "proto/opentelemetry/metrics.proto",
+                "proto/opentelemetry/metrics_service.proto",
+            ],
             &["proto/opentelemetry"],
         )
         .unwrap();
