@@ -1,4 +1,4 @@
-use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::sync::broadcast::{Receiver, Sender};
 
 use crate::proto::goodmetrics::Datum;
 
@@ -15,7 +15,7 @@ pub struct MetricsReceiveQueue {
 
 impl MetricsSink for MetricsSendQueue {
     fn drain(&self, metrics: Vec<Datum>) -> Result<String, super::ErrorCode> {
-        match self.tx.try_send(metrics) {
+        match self.tx.send(metrics) {
             Ok(_) => Ok("collected".to_string()),
             Err(e) => {
                 log::warn!("queue error: {:?}", e);
@@ -27,7 +27,7 @@ impl MetricsSink for MetricsSendQueue {
 
 impl MetricsSendQueue {
     pub fn new() -> (MetricsSendQueue, MetricsReceiveQueue) {
-        let (tx, rx) = mpsc::channel(100);
+        let (tx, rx) = tokio::sync::broadcast::channel(4096);
 
         (MetricsSendQueue { tx }, MetricsReceiveQueue { rx })
     }
@@ -35,6 +35,12 @@ impl MetricsSendQueue {
 
 impl MetricsReceiveQueue {
     pub async fn recv(&mut self) -> Option<Vec<Datum>> {
-        self.rx.recv().await
+        match self.rx.recv().await {
+            Ok(some_datums) => Some(some_datums),
+            Err(error) => {
+                log::error!("failed to receive some datums: {:?}", error);
+                None
+            }
+        }
     }
 }

@@ -22,7 +22,10 @@ use futures::pin_mut;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use regex::Regex;
-use tokio::task;
+use tokio::{
+    task,
+    time::{sleep, timeout_at, Instant},
+};
 use tokio_postgres::{
     binary_copy::BinaryCopyInWriter,
     error::SqlState,
@@ -77,9 +80,11 @@ impl PostgresSender {
 
         while let Some(mut batch) = self.rx.recv().await {
             log::info!("Sender woke. Trying to collect a batch...");
-            tokio::time::sleep(Duration::from_secs(5)).await;
-            let mut api_calls = 1;
-            while let Ok(mut extras) = self.rx.rx.try_recv() {
+            sleep(Duration::from_secs(5)).await;
+
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let mut api_calls: u32 = 1;
+            while let Ok(Some(mut extras)) = timeout_at(deadline, self.rx.recv()).await {
                 api_calls += 1;
                 batch.append(&mut extras);
             }

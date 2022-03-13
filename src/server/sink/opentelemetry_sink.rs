@@ -1,24 +1,38 @@
-// use crate::proto::channel_connection::get_channel;
+use tonic::transport::Channel;
 
-// use super::{metricssendqueue::MetricsReceiveQueue, sink_error::SinkError};
+use crate::proto::channel_connection::get_channel;
+use crate::proto::opentelemetry::metrics_service::metrics_service_client::MetricsServiceClient;
+use crate::server::sink::sink_error::StringError;
 
-// pub struct OtelSender {
-//     rx: MetricsReceiveQueue,
-// }
+use super::{metricssendqueue::MetricsReceiveQueue, sink_error::SinkError};
 
-// impl OtelSender {
-//     pub async fn new_connection(
-//         opentelemetry_endpoint: &str,
-//         rx: MetricsReceiveQueue,
-//     ) -> Result<OtelSender, SinkError> {
-//         let channel = get_channel(opentelemetry_endpoint);
-//         metrics_service::MetricsService::new
+pub struct OtelSender {
+    rx: MetricsReceiveQueue,
+    client: MetricsServiceClient<Channel>,
+}
 
-//         todo!()
-//     }
+impl OtelSender {
+    pub async fn new_connection(
+        opentelemetry_endpoint: &str,
+        rx: MetricsReceiveQueue,
+    ) -> Result<OtelSender, SinkError> {
+        let client = match get_channel(opentelemetry_endpoint).await {
+            Ok(channel) => MetricsServiceClient::new(channel),
+            Err(e) => {
+                return Err(SinkError::StringError(StringError {
+                    message: format!("Could not get a channel: {:?}", e),
+                }))
+            }
+        };
 
-//     pub async fn consume_stuff(mut self) -> Result<u32, SinkError> {
-//         log::info!("started postgres consumer");
-//         todo!()
-//     }
-// }
+        Ok(OtelSender {
+            rx: rx,
+            client: client,
+        })
+    }
+
+    pub async fn consume_stuff(mut self) -> Result<u32, SinkError> {
+        log::info!("started opentelemetry consumer");
+        todo!()
+    }
+}
