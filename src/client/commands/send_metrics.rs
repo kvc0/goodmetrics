@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::proto::channel_connection::get_channel;
-use crate::proto::metrics::pb::{metrics_client::MetricsClient, Datum, MetricsRequest};
+use crate::proto::goodmetrics::{metrics_client::MetricsClient, Datum, MetricsRequest};
 
 pub async fn send_metrics(metrics: Vec<Datum>, endpoint: &str) {
     for metric in &metrics {

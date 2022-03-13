@@ -1,4 +1,4 @@
-use goodmetrics::proto::metrics::pb::metrics_server::MetricsServer;
+use goodmetrics::proto::goodmetrics::metrics_server::MetricsServer;
 use goodmetrics::server::config::options::{get_args, Options};
 use goodmetrics::server::servers::goodmetrics::GoodMetricsServer;
 use goodmetrics::server::sink::{

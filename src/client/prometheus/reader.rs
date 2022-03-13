@@ -3,7 +3,7 @@ use std::{collections::HashMap, str::Chars};
 use lazy_static::lazy_static;
 use regex::Regex;
 
-use crate::proto::metrics::pb::{dimension, measurement, Datum, Dimension, Histogram, Measurement};
+use crate::proto::goodmetrics::{dimension, measurement, Datum, Dimension, Histogram, Measurement};
 
 lazy_static! {
     // # TYPE go_memstats_alloc_bytes gauge

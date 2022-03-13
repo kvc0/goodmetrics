@@ -1,7 +1,7 @@
 use tonic::Response;
 
-use crate::proto::metrics::pb::metrics_server::Metrics;
-use crate::proto::metrics::pb::{MetricsReply, MetricsRequest};
+use crate::proto::goodmetrics::metrics_server::Metrics;
+use crate::proto::goodmetrics::{MetricsReply, MetricsRequest};
 use crate::server::sink::metricssendqueue::MetricsSendQueue;
 use crate::server::sink::MetricsSink;
 

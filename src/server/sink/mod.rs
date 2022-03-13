@@ -1,4 +1,4 @@
-use crate::proto::metrics::pb::Datum;
+use crate::proto::goodmetrics::Datum;
 
 pub mod metricssendqueue;
 mod opentelemetry_sink;

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use postgres_types::Type;
 
-use crate::proto::metrics::pb::{dimension, measurement, Datum, Dimension, Measurement};
+use crate::proto::goodmetrics::{dimension, measurement, Datum, Dimension, Measurement};
 
 #[derive(Clone)]
 pub struct TypeConverter {

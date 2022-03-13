@@ -5,7 +5,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use crate::proto::metrics::pb::{dimension, measurement, Datum, Dimension, Measurement};
+use crate::proto::goodmetrics::{dimension, measurement, Datum, Dimension, Measurement};
 use crate::server::{
     postgres_things::{
         ddl::{self, clean_id},

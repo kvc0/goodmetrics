@@ -1,6 +1,6 @@
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
-use crate::proto::metrics::pb::Datum;
+use crate::proto::goodmetrics::Datum;
 
 use super::{ErrorCode, MetricsSink};
 

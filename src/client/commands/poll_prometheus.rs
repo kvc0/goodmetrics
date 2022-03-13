@@ -9,7 +9,7 @@ use crate::{
     client::prometheus::reader::read_prometheus,
     proto::{
         channel_connection::get_channel,
-        metrics::pb::{metrics_client::MetricsClient, Dimension, MetricsRequest},
+        goodmetrics::{metrics_client::MetricsClient, Dimension, MetricsRequest},
     },
 };
 

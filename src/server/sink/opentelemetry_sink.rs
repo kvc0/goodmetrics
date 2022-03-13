@@ -1,3 +1,5 @@
+// use crate::proto::channel_connection::get_channel;
+
 // use super::{metricssendqueue::MetricsReceiveQueue, sink_error::SinkError};
 
 // pub struct OtelSender {
@@ -6,10 +8,11 @@
 
 // impl OtelSender {
 //     pub async fn new_connection(
-//         connection_string: &str,
+//         opentelemetry_endpoint: &str,
 //         rx: MetricsReceiveQueue,
 //     ) -> Result<OtelSender, SinkError> {
-//         // get_client();
+//         let channel = get_channel(opentelemetry_endpoint);
+
 //         todo!()
 //     }
 

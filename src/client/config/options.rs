@@ -6,7 +6,7 @@ use structopt::StructOpt;
 use structopt_toml::StructOptToml;
 
 use super::cli_config::default_dir;
-use crate::proto::metrics::pb::{Datum, Dimension};
+use crate::proto::goodmetrics::{Datum, Dimension};
 
 lazy_static! {
     static ref DEFAULT_DIR: String = default_dir();
