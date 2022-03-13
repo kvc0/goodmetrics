@@ -2,7 +2,7 @@ use bb8::Pool;
 use bb8_postgres::PostgresConnectionManager;
 use tokio_postgres::NoTls;
 
-use crate::sink::postgres_sink::{SinkError, StringError};
+use crate::sink::sink_error::{SinkError, StringError};
 
 pub struct PostgresConnector {
     pool: Pool<PostgresConnectionManager<NoTls>>,

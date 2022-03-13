@@ -1,7 +1,6 @@
 use std::{
     collections::BTreeMap,
     error::Error,
-    fmt::Display,
     rc::Rc,
     time::{Duration, SystemTime},
 };
@@ -15,6 +14,7 @@ use crate::{
         type_conversion::TypeConverter,
     },
     proto::metrics::pb::{dimension, measurement, Datum, Dimension, Measurement},
+    sink::sink_error::{DescribedError, MissingColumn, MissingTable},
 };
 use bb8::PooledConnection;
 use bb8_postgres::PostgresConnectionManager;
@@ -22,7 +22,6 @@ use futures::pin_mut;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use regex::Regex;
-use thiserror::Error;
 use tokio::task;
 use tokio_postgres::{
     binary_copy::BinaryCopyInWriter,
@@ -31,82 +30,7 @@ use tokio_postgres::{
     CopyInSink, GenericClient, NoTls,
 };
 
-use super::metricssendqueue::MetricsReceiveQueue;
-
-#[derive(Debug, Error)]
-pub struct DescribedError {
-    pub message: String,
-    pub inner: tokio_postgres::Error,
-}
-
-impl Display for DescribedError {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fmt.debug_struct("DescribedError")
-            .field("message", &self.message)
-            .field("cause", &self.inner)
-            .finish()
-    }
-}
-
-#[derive(Debug, Error)]
-pub struct StringError {
-    pub message: String,
-}
-
-impl Display for StringError {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fmt.debug_struct("StringError")
-            .field("message", &self.message)
-            .finish()
-    }
-}
-
-#[derive(Debug, Error)]
-pub struct MissingTable {
-    pub table: String,
-}
-
-impl Display for MissingTable {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fmt.debug_struct("MissingTable")
-            .field("table", &self.table)
-            .finish()
-    }
-}
-
-#[derive(Debug, Error)]
-pub struct MissingColumn {
-    pub table: String,
-    pub column: String,
-    pub data_type: String,
-}
-
-impl Display for MissingColumn {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fmt.debug_struct("MissingColumn")
-            .field("table", &self.table)
-            .field("column", &self.column)
-            .finish()
-    }
-}
-
-#[derive(Error, Debug)]
-pub enum SinkError {
-    #[error("unhandled postgres error")]
-    Postgres(#[from] tokio_postgres::Error),
-
-    #[error("Some postgres error with a description")]
-    DescribedError(#[from] DescribedError),
-
-    #[error("unhandled error")]
-    StringError(#[from] StringError),
-
-    #[error("i gotta have more column")]
-    MissingColumn(#[from] MissingColumn),
-
-    #[error("i gotta have more table")]
-    MissingTable(#[from] MissingTable),
-}
+use super::{metricssendqueue::MetricsReceiveQueue, sink_error::SinkError};
 
 lazy_static! {
     // column "available_messages" of relation "table_name" does not exist

@@ -2,7 +2,8 @@ use config::options::{get_args, Options};
 use servers::goodmetrics::GoodMetricsServer;
 use sink::{
     metricssendqueue::{MetricsReceiveQueue, MetricsSendQueue},
-    postgres_sink::{PostgresSender, SinkError},
+    postgres_sink::PostgresSender,
+    sink_error::SinkError,
 };
 use tonic::transport::{Identity, Server, ServerTlsConfig};
 

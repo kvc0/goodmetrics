@@ -1,7 +1,7 @@
 use postgres_types::Type;
 use tokio_postgres::{error::SqlState, Client, GenericClient};
 
-use crate::sink::postgres_sink::SinkError;
+use crate::sink::sink_error::SinkError;
 
 use super::postgres_connector::PostgresConnector;
 
