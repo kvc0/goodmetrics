@@ -6,8 +6,11 @@ use std::{
 use tokio::time;
 
 use crate::{
-    client::{commands::client_connection::get_client, prometheus::reader::read_prometheus},
-    proto::metrics::pb::{metrics_client::MetricsClient, Dimension, MetricsRequest},
+    client::prometheus::reader::read_prometheus,
+    proto::{
+        channel_connection::get_channel,
+        metrics::pb::{metrics_client::MetricsClient, Dimension, MetricsRequest},
+    },
 };
 
 pub async fn poll_prometheus(
@@ -34,7 +37,7 @@ pub async fn poll_prometheus(
             Ok(datums) => {
                 log::debug!("lines: {:?}", datums);
 
-                match get_client(goodmetrics_endpoint).await {
+                match get_channel(goodmetrics_endpoint).await {
                     Ok(channel) => {
                         log::debug!("connected: {:?}", channel);
                         let mut client = MetricsClient::new(channel);

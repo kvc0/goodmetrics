@@ -3,7 +3,7 @@ use std::sync::Arc;
 use rustls::{ClientConfig, ServerCertVerifier};
 use tonic::transport::Channel;
 
-pub async fn get_client(endpoint: &str) -> Result<Channel, Box<dyn std::error::Error>> {
+pub async fn get_channel(endpoint: &str) -> Result<Channel, Box<dyn std::error::Error>> {
     // FIXME: set up optional no-issuer-validation. Can keep
     //        hostname validation I think though?
     let mut config = ClientConfig::new();
