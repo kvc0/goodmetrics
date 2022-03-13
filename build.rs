@@ -14,11 +14,16 @@ fn main() {
             "goodmetrics.StatisticSet",
             r#"#[postgres(name = "statistic_set")]"#,
         )
-        // .type_attribute("goodmetrics.Datum", derivation)
-        // .type_attribute("goodmetrics.Dimension", derivation)
-        // .type_attribute("goodmetrics.Measurement", derivation)
-        // .type_attribute("goodmetrics.Measurement.measurement_type", derivation)
         .file_descriptor_set_path(out_dir.join("goodmetrics_descriptor.bin"))
         .compile(&["proto/metrics/goodmetrics.proto"], &["proto"])
+        .unwrap();
+
+    tonic_build::configure()
+        .build_server(false)
+        .type_attribute(".", "#[derive(Debug)]")
+        .compile(
+            &["proto/opentelemetry/metrics.proto"],
+            &["proto/opentelemetry"],
+        )
         .unwrap();
 }
