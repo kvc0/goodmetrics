@@ -6,9 +6,8 @@ use std::{
 use tokio::time;
 
 use crate::{
-    commands::client_connection::get_client,
-    metrics::{metrics_client::MetricsClient, Dimension, MetricsRequest},
-    prometheus::reader::read_prometheus,
+    client::{commands::client_connection::get_client, prometheus::reader::read_prometheus},
+    proto::metrics::pb::{metrics_client::MetricsClient, Dimension, MetricsRequest},
 };
 
 pub async fn poll_prometheus(

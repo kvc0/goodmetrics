@@ -3,7 +3,7 @@ use std::{collections::HashMap, str::Chars};
 use lazy_static::lazy_static;
 use regex::Regex;
 
-use crate::metrics::{self, dimension, measurement, Datum, Dimension, Measurement};
+use crate::proto::metrics::pb::{dimension, measurement, Datum, Dimension, Histogram, Measurement};
 
 lazy_static! {
     // # TYPE go_memstats_alloc_bytes gauge
@@ -307,7 +307,7 @@ fn read_histogram(
             measurements: HashMap::from([(
                 "value".to_string(),
                 Measurement {
-                    value: Some(measurement::Value::Histogram(metrics::Histogram {
+                    value: Some(measurement::Value::Histogram(Histogram {
                         buckets: HashMap::new(),
                     })),
                 },

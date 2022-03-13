@@ -1,16 +1,16 @@
 [package]
 authors = ["Kenny"]
-name = "goodmetrics_relay"
+name = "goodmetrics"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
 name = "goodmetrics"
-path = "src/client/client.rs"
+path = "src/bin/client.rs"
 
 [[bin]]
 name = "goodmetricsd"
-path = "src/server/server.rs"
+path = "src/bin/server.rs"
 
 
 [dependencies]

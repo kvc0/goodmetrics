@@ -1,12 +1,5 @@
-use commands::{poll_prometheus::poll_prometheus, send_metrics::send_metrics};
-use config::{cli_config::get_args, options::Subcommand};
-
-pub mod metrics {
-    tonic::include_proto!("goodmetrics");
-}
-mod commands;
-mod config;
-mod prometheus;
+use goodmetrics::client::commands::{poll_prometheus::poll_prometheus, send_metrics::send_metrics};
+use goodmetrics::client::config::{cli_config::get_args, options::Subcommand};
 
 #[tokio::main]
 async fn main() {

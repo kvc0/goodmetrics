@@ -5,7 +5,8 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use crate::{
+use crate::proto::metrics::pb::{dimension, measurement, Datum, Dimension, Measurement};
+use crate::server::{
     postgres_things::{
         ddl::{self, clean_id},
         histogram::get_or_create_histogram_type,
@@ -13,7 +14,6 @@ use crate::{
         statistic_set::get_or_create_statistic_set_type,
         type_conversion::TypeConverter,
     },
-    proto::metrics::pb::{dimension, measurement, Datum, Dimension, Measurement},
     sink::sink_error::{DescribedError, MissingColumn, MissingTable},
 };
 use bb8::PooledConnection;

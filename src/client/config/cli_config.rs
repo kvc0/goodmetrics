@@ -21,7 +21,7 @@ pub fn default_dir() -> String {
     }
 }
 
-pub(crate) fn get_args() -> Options {
+pub fn get_args() -> Options {
     let command_line_args = Options::from_args();
 
     let opts = match std::fs::read_to_string(command_line_args.config_file.clone()) {

@@ -6,7 +6,7 @@ use structopt::StructOpt;
 use structopt_toml::StructOptToml;
 
 use super::cli_config::default_dir;
-use crate::metrics::{Datum, Dimension};
+use crate::proto::metrics::pb::{Datum, Dimension};
 
 lazy_static! {
     static ref DEFAULT_DIR: String = default_dir();
@@ -15,7 +15,7 @@ lazy_static! {
 #[derive(Debug, Deserialize, StructOpt, StructOptToml)]
 #[serde(default)]
 #[structopt(about = "Good metrics CLI client")]
-pub(crate) struct Options {
+pub struct Options {
     #[structopt(long, default_value = &DEFAULT_DIR)]
     pub config_file: String,
     #[structopt(long, default_value = "https://localhost:9573")]
@@ -28,7 +28,7 @@ pub(crate) struct Options {
 }
 
 #[derive(Debug, Deserialize, StructOpt)]
-pub(crate) enum Subcommand {
+pub enum Subcommand {
     #[structopt(about = "Send measurements")]
     Send {
         #[structopt(parse(try_from_str = serde_json::from_str))]

@@ -2,11 +2,11 @@ use tonic::Response;
 
 use crate::proto::metrics::pb::metrics_server::Metrics;
 use crate::proto::metrics::pb::{MetricsReply, MetricsRequest};
-use crate::sink::metricssendqueue::MetricsSendQueue;
-use crate::sink::MetricsSink;
+use crate::server::sink::metricssendqueue::MetricsSendQueue;
+use crate::server::sink::MetricsSink;
 
 #[derive(Debug)]
-pub(crate) struct GoodMetricsServer {
+pub struct GoodMetricsServer {
     pub metrics_sink: MetricsSendQueue,
 }
 
@@ -27,9 +27,9 @@ impl Metrics for GoodMetricsServer {
                 Ok(Response::new(MetricsReply {}))
             }
             Err(e) => match e {
-                crate::sink::ErrorCode::QueueFull => Err(tonic::Status::resource_exhausted(
-                    "No space left in the send buffer",
-                )),
+                crate::server::sink::ErrorCode::QueueFull => Err(
+                    tonic::Status::resource_exhausted("No space left in the send buffer"),
+                ),
             },
         }
     }

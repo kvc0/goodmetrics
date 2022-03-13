@@ -4,7 +4,7 @@ use structopt_toml::StructOptToml;
 
 #[derive(Debug, Deserialize, StructOpt, StructOptToml)]
 #[serde(default)]
-pub(crate) struct Options {
+pub struct Options {
     #[structopt(long)]
     pub config: Option<String>,
     #[structopt(long, default_value = "0.0.0.0:9573")]
@@ -31,7 +31,7 @@ pub(crate) struct Options {
     pub connection_string: String,
 }
 
-pub(crate) fn get_args() -> Options {
+pub fn get_args() -> Options {
     let command_line_args = Options::from_args();
 
     match command_line_args.config {

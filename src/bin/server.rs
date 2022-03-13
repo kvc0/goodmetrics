@@ -1,6 +1,7 @@
-use config::options::{get_args, Options};
-use servers::goodmetrics::GoodMetricsServer;
-use sink::{
+use goodmetrics::proto::metrics::pb::metrics_server::MetricsServer;
+use goodmetrics::server::config::options::{get_args, Options};
+use goodmetrics::server::servers::goodmetrics::GoodMetricsServer;
+use goodmetrics::server::sink::{
     metricssendqueue::{MetricsReceiveQueue, MetricsSendQueue},
     postgres_sink::PostgresSender,
     sink_error::SinkError,
@@ -10,16 +11,8 @@ use tonic::transport::{Identity, Server, ServerTlsConfig};
 use std::{cmp::min, net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
 
-mod config;
-mod postgres_things;
-mod servers;
-mod sink;
-
-mod proto;
-use proto::metrics::pb::metrics_server::MetricsServer;
-
 async fn serve(
-    args: Arc<config::options::Options>,
+    args: Arc<goodmetrics::server::config::options::Options>,
     send_queue: MetricsSendQueue,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let address: std::net::SocketAddr = args.listen_socket_address.parse().unwrap();
@@ -60,7 +53,7 @@ async fn serve(
 }
 
 async fn get_identity(
-    options: &config::options::Options,
+    options: &goodmetrics::server::config::options::Options,
 ) -> Result<Identity, Box<dyn std::error::Error>> {
     let identity = if !options.cert.is_empty() && !options.cert_private_key.is_empty() {
         let cert = tokio::fs::read("examples/data/tls/server.pem").await?;
@@ -97,7 +90,7 @@ fn main() {
         .block_on(run_server(args));
 }
 
-async fn run_server(args: config::options::Options) {
+async fn run_server(args: goodmetrics::server::config::options::Options) {
     let mut handlers = Vec::new();
     let args_shared = Arc::from(args);
     let (send_queue, receive_queue) = MetricsSendQueue::new();

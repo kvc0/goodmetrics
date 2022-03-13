@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::metrics::{metrics_client::MetricsClient, Datum, MetricsRequest};
+use crate::proto::metrics::pb::{metrics_client::MetricsClient, Datum, MetricsRequest};
 
 use super::client_connection::get_client;
 

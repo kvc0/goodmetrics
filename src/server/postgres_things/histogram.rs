@@ -4,7 +4,7 @@ use postgres_types::Type;
 use serde_json::json;
 use tokio_postgres::{error::SqlState, Client, GenericClient};
 
-use crate::{proto::metrics::pb::Histogram, sink::sink_error::SinkError};
+use crate::{proto::metrics::pb::Histogram, server::sink::sink_error::SinkError};
 
 use super::postgres_connector::PostgresConnector;
 
