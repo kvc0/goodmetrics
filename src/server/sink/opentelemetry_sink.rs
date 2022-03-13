@@ -12,6 +12,7 @@
 //         rx: MetricsReceiveQueue,
 //     ) -> Result<OtelSender, SinkError> {
 //         let channel = get_channel(opentelemetry_endpoint);
+//         metrics_service::MetricsService::new
 
 //         todo!()
 //     }

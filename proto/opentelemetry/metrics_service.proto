@@ -14,7 +14,7 @@
 
 syntax = "proto3";
 
-package opentelemetry.proto.collector.metrics;
+package opentelemetry.proto.metrics_service;
 
 import "metrics.proto";
 
