@@ -71,7 +71,7 @@ impl PostgresSender {
     }
 
     pub async fn consume_stuff(mut self) -> Result<u32, SinkError> {
-        log::info!("started consumer");
+        log::info!("started postgres consumer");
         let connector = Rc::new(self.connector);
         let type_converter = Rc::new(self.type_converter);
 

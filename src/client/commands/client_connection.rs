@@ -3,11 +3,7 @@ use std::sync::Arc;
 use rustls::{ClientConfig, ServerCertVerifier};
 use tonic::transport::Channel;
 
-use crate::metrics::metrics_client::MetricsClient;
-
-pub async fn get_client(
-    endpoint: &str,
-) -> Result<MetricsClient<Channel>, Box<dyn std::error::Error>> {
+pub async fn get_client(endpoint: &str) -> Result<Channel, Box<dyn std::error::Error>> {
     // FIXME: set up optional no-issuer-validation. Can keep
     //        hostname validation I think though?
     let mut config = ClientConfig::new();
@@ -18,13 +14,10 @@ pub async fn get_client(
 
     let tls = tonic::transport::ClientTlsConfig::new().rustls_client_config(config);
 
-    let channel = Channel::from_shared(endpoint.to_string())?
+    Ok(Channel::from_shared(endpoint.to_string())?
         .tls_config(tls)?
         .connect()
-        .await?;
-    let client = MetricsClient::new(channel);
-
-    Ok(client)
+        .await?)
 }
 
 struct StupidVerifier {}

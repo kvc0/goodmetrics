@@ -7,7 +7,7 @@ use tokio::time;
 
 use crate::{
     commands::client_connection::get_client,
-    metrics::{Dimension, MetricsRequest},
+    metrics::{metrics_client::MetricsClient, Dimension, MetricsRequest},
     prometheus::reader::read_prometheus,
 };
 
@@ -36,8 +36,9 @@ pub async fn poll_prometheus(
                 log::debug!("lines: {:?}", datums);
 
                 match get_client(goodmetrics_endpoint).await {
-                    Ok(mut client) => {
-                        log::debug!("connected: {:?}", client);
+                    Ok(channel) => {
+                        log::debug!("connected: {:?}", channel);
+                        let mut client = MetricsClient::new(channel);
                         let result = client
                             .send_metrics(MetricsRequest {
                                 shared_dimensions: bonus_dimensions.clone(),
