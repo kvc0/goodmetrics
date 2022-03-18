@@ -1,8 +1,9 @@
 use goodmetrics::proto::goodmetrics::metrics_server::MetricsServer;
-use goodmetrics::server::config::options::{get_args, Options};
+use goodmetrics::server::config::options::get_args;
 use goodmetrics::server::servers::goodmetrics::GoodMetricsServer;
 use goodmetrics::server::sink::{
     metricssendqueue::{MetricsReceiveQueue, MetricsSendQueue},
+    opentelemetry_sink::OtelSender,
     postgres_sink::PostgresSender,
     sink_error::SinkError,
 };
@@ -83,6 +84,8 @@ fn main() {
     )
     .init();
 
+    log::info!("args: {:?}", args);
+
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -116,35 +119,68 @@ async fn run_server(args: goodmetrics::server::config::options::Options) {
         handlers.push(h);
     }
 
-    let bg_handle = std::thread::spawn(move || {
-        // Consume stuff on a background task
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap()
-            .block_on(consume(args_shared, receive_queue))
-            .unwrap();
-    });
+    if let Some(connection_string_arg) = &args_shared.connection_string {
+        let connection_string = connection_string_arg.clone();
+        let bg_handle = std::thread::spawn(move || {
+            // Consume stuff on a background task
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(consume_postgres(connection_string, receive_queue))
+                .unwrap();
+        });
+        handlers.push(bg_handle);
+    }
 
-    bg_handle.join().unwrap();
+    if let Some(otlp_remote_arg) = &args_shared.otlp_remote {
+        let cloned_queue = MetricsReceiveQueue {
+            rx: send_queue.tx.subscribe()
+        };
+        let otlp_remote = otlp_remote_arg.clone();
+        let bg_handle = std::thread::spawn(move || {
+            // Consume stuff on a background task
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(consume_otel(otlp_remote, cloned_queue))
+                .unwrap();
+        });
+        handlers.push(bg_handle);
+    }
 
     for h in handlers {
         h.join().unwrap();
     }
 }
 
-async fn consume(
-    args_shared: Arc<Options>,
+async fn consume_postgres(
+    connection_string: String,
     receive_queue: MetricsReceiveQueue,
 ) -> Result<(), SinkError> {
-    let sender =
-        match PostgresSender::new_connection(&args_shared.connection_string, receive_queue).await {
-            Ok(sender) => sender,
-            Err(e) => {
-                log::error!("failed to start server: {:?}", e);
-                std::process::exit(3)
-            }
-        };
+    let sender = match PostgresSender::new_connection(&connection_string, receive_queue).await {
+        Ok(sender) => sender,
+        Err(e) => {
+            log::error!("failed to start postgres sender: {:?}", e);
+            std::process::exit(3)
+        }
+    };
+    sender.consume_stuff().await?;
+    Ok(())
+}
+
+async fn consume_otel(
+    opentelemetry_endpoint: String,
+    receive_queue: MetricsReceiveQueue,
+) -> Result<(), SinkError> {
+    let sender = match OtelSender::new_connection(&opentelemetry_endpoint, receive_queue).await {
+        Ok(sender) => sender,
+        Err(e) => {
+            log::error!("failed to start otel sender: {:?}", e);
+            std::process::exit(3)
+        }
+    };
     sender.consume_stuff().await?;
     Ok(())
 }

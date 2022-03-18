@@ -1,7 +1,7 @@
 use crate::proto::goodmetrics::Datum;
 
 pub mod metricssendqueue;
-mod opentelemetry_sink;
+pub mod opentelemetry_sink;
 pub mod postgres_sink;
 pub mod sink_error;
 

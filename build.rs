@@ -23,8 +23,8 @@ fn main() {
         // .type_attribute(".", "#[derive(Debug)]")
         .compile(
             &[
-                "proto/opentelemetry/metrics.proto",
-                "proto/opentelemetry/metrics_service.proto",
+                "proto/opentelemetry/metrics/v1/metrics.proto",
+                "proto/opentelemetry/collector/metrics/v1/metrics.proto",
             ],
             &["proto/opentelemetry"],
         )

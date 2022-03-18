@@ -40,8 +40,8 @@ serde_derive = {version = "1.0"}
 serde_json = {version = "1.0"}
 reqwest = { version = "0.11", features = [] }
 
-structopt = {version = "^0.3.23"}
-structopt-toml = {version = "0.5.0"}
+clap = {version = "3.1.6", features = ["derive"]}
+# structopt-toml = {version = "0.5.0"}
 dirs = {version = "4.0.0"}
 lazy_static = {version = "1.4.0"}
 

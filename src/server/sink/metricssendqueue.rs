@@ -6,7 +6,7 @@ use super::{ErrorCode, MetricsSink};
 
 #[derive(Debug, Clone)]
 pub struct MetricsSendQueue {
-    tx: Sender<Vec<Datum>>,
+    pub tx: Sender<Vec<Datum>>,
 }
 
 pub struct MetricsReceiveQueue {

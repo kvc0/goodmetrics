@@ -16,8 +16,7 @@ impl PostgresConnector {
         let pg_manager = PostgresConnectionManager::new_from_stringlike(
             connection_string,
             tokio_postgres::NoTls,
-        )
-        .unwrap();
+        )?;
         let pool = match Pool::builder()
             .max_size(max_conns as u32)
             .build(pg_manager)

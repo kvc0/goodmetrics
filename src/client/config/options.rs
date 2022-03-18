@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
+use clap::Parser;
 use lazy_static::lazy_static;
 use serde::Deserialize;
-use structopt::StructOpt;
-use structopt_toml::StructOptToml;
 
 use super::cli_config::default_dir;
 use crate::proto::goodmetrics::{Datum, Dimension};
@@ -12,42 +11,42 @@ lazy_static! {
     static ref DEFAULT_DIR: String = default_dir();
 }
 
-#[derive(Debug, Deserialize, StructOpt, StructOptToml)]
-#[serde(default)]
-#[structopt(about = "Good metrics CLI client")]
+#[derive(Debug, Deserialize, Parser)]
+//#[serde(default)]
+#[clap(about = "Good metrics CLI client")]
 pub struct Options {
-    #[structopt(long, default_value = &DEFAULT_DIR)]
+    #[clap(long, default_value = &DEFAULT_DIR)]
     pub config_file: String,
-    #[structopt(long, default_value = "https://localhost:9573")]
+    #[clap(long, default_value = "https://localhost:9573")]
     pub goodmetrics_server: String,
-    #[structopt(long, default_value = "info")]
+    #[clap(long, default_value = "info")]
     pub log_level: String,
 
-    #[structopt(subcommand)]
+    #[clap(subcommand)]
     pub command: Subcommand,
 }
 
-#[derive(Debug, Deserialize, StructOpt)]
+#[derive(Debug, Deserialize, Parser)]
 pub enum Subcommand {
-    #[structopt(about = "Send measurements")]
+    #[clap(about = "Send measurements")]
     Send {
-        #[structopt(parse(try_from_str = serde_json::from_str))]
+        #[clap(parse(try_from_str = serde_json::from_str))]
         metrics: Vec<Datum>,
     },
-    #[structopt(about = "Poll prometheus metrics")]
+    #[clap(about = "Poll prometheus metrics")]
     PollPrometheus {
-        #[structopt(
-            about = "Prefix all the tables emitted by this prometheus reporter. This way you can put things like per-server host metrics under a host_* or node_* prefix."
+        #[clap(
+            help = "Prefix all the tables emitted by this prometheus reporter. This way you can put things like per-server host metrics under a host_* or node_* prefix."
         )]
         prefix: String,
 
-        #[structopt(default_value = "http://127.0.0.1:9100/metrics")]
+        #[clap(default_value = "http://127.0.0.1:9100/metrics")]
         poll_endpoint: String,
 
-        #[structopt(long, default_value = "10")]
+        #[clap(long, default_value = "10")]
         interval_seconds: u32,
 
-        #[structopt(long, default_value = "{}", parse(try_from_str = serde_json::from_str))]
+        #[clap(long, default_value = "{}", parse(try_from_str = serde_json::from_str))]
         bonus_dimensions: HashMap<String, Dimension>,
     },
 }

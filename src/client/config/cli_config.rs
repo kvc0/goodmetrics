@@ -1,6 +1,5 @@
+use clap::Parser;
 use lazy_static::lazy_static;
-use structopt::StructOpt;
-use structopt_toml::StructOptToml;
 
 use super::options::Options;
 
@@ -22,12 +21,13 @@ pub fn default_dir() -> String {
 }
 
 pub fn get_args() -> Options {
-    let command_line_args = Options::from_args();
+    let command_line_args = Options::parse();
 
     let opts = match std::fs::read_to_string(command_line_args.config_file.clone()) {
         Ok(config_file_toml_str) => {
             log::debug!("Using config file: {:?}", config_file_toml_str);
-            Options::from_args_with_toml(&config_file_toml_str).unwrap()
+            Options::try_parse_from(config_file_toml_str.lines()).unwrap_or(command_line_args)
+            //Options::from_args_with_toml(&config_file_toml_str).unwrap()
         }
         Err(_) => command_line_args,
     };
