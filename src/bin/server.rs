@@ -57,8 +57,8 @@ async fn get_identity(
     options: &goodmetrics::server::config::options::Options,
 ) -> Result<Identity, Box<dyn std::error::Error>> {
     let identity = if !options.cert.is_empty() && !options.cert_private_key.is_empty() {
-        let cert = tokio::fs::read("examples/data/tls/server.pem").await?;
-        let key = tokio::fs::read("examples/data/tls/server.key").await?;
+        let cert = tokio::fs::read(&options.cert).await?;
+        let key = tokio::fs::read(&options.cert_private_key).await?;
 
         Identity::from_pem(cert, key)
     } else {

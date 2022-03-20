@@ -24,7 +24,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use tokio::{
     task,
-    time::{sleep, timeout_at, Instant},
+    time::{timeout_at, Instant},
 };
 use tokio_postgres::{
     binary_copy::BinaryCopyInWriter,
@@ -80,7 +80,6 @@ impl PostgresSender {
 
         while let Some(mut batch) = self.rx.recv().await {
             log::info!("Sender woke. Trying to collect a batch...");
-            sleep(Duration::from_secs(5)).await;
 
             let deadline = Instant::now() + Duration::from_secs(5);
             let mut api_calls: u32 = 1;

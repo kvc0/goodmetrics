@@ -18,7 +18,13 @@ impl Metrics for GoodMetricsServer {
     ) -> Result<tonic::Response<MetricsReply>, tonic::Status> {
         log::trace!("request: {:?}", request);
 
-        let queue_result = self.metrics_sink.drain(request.into_inner().metrics);
+        // We shared the dimensions across the wire, but here we'll keep it simple and just spew it all across each datum
+        let mut request = request.into_inner();
+        request
+            .metrics
+            .iter_mut()
+            .for_each(|datum| datum.dimensions.extend(request.shared_dimensions.clone()));
+        let queue_result = self.metrics_sink.drain(request.metrics);
 
         match queue_result {
             Ok(result) => {
