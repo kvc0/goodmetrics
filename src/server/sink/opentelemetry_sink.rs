@@ -1,14 +1,21 @@
+use std::collections::BTreeMap;
 use std::time::Duration;
 
-use tokio::time::{sleep, Instant, timeout_at};
+use tokio::time::{sleep, timeout_at, Instant};
 use tonic::transport::Channel;
 
 use crate::proto::channel_connection::get_channel;
 use crate::proto::opentelemetry::collector::metrics::v1::metrics_service_client::MetricsServiceClient;
 use crate::proto::opentelemetry::collector::metrics::v1::ExportMetricsServiceRequest;
+use crate::proto::opentelemetry::common::v1::{
+    any_value, AnyValue, InstrumentationLibrary, KeyValue,
+};
+use crate::proto::opentelemetry::metrics::v1::{
+    metric, number_data_point, summary_data_point, AggregationTemporality, Gauge, Histogram,
+    HistogramDataPoint, InstrumentationLibraryMetrics, Metric, NumberDataPoint, ResourceMetrics,
+    Summary, SummaryDataPoint,
+};
 use crate::server::sink::sink_error::StringError;
-use crate::proto::opentelemetry::common::v1::{AnyValue, InstrumentationLibrary, KeyValue, any_value};
-use crate::proto::opentelemetry::metrics::v1::{Gauge, Metric, NumberDataPoint, ResourceMetrics, Histogram, HistogramDataPoint, Summary, SummaryDataPoint, summary_data_point, InstrumentationLibraryMetrics, metric, number_data_point, AggregationTemporality};
 
 use super::{metricssendqueue::MetricsReceiveQueue, sink_error::SinkError};
 
@@ -31,10 +38,7 @@ impl OtelSender {
             }
         };
 
-        Ok(OtelSender {
-            rx: rx,
-            client: client,
-        })
+        Ok(OtelSender { rx, client })
     }
 
     pub async fn consume_stuff(mut self) -> Result<u32, SinkError> {
@@ -72,7 +76,8 @@ impl OtelSender {
                             // }
                             measurement.value.map(|value| {
                                 Metric {
-                                    name: datum.metric.clone(),
+                                    // So yeah, this splays all your metrics across a shared namespace because prometheus / otel.
+                                    name: format!("{metric_name}_{measurement_name}", metric_name = datum.metric, measurement_name=name),
                                     description: "goodmetrics compatibility conversion".to_string(),
                                     unit: "1".to_string(),
                                     data: Some(match value {
@@ -115,33 +120,37 @@ impl OtelSender {
                                 }
                             })
                         })
-                        .collect::<Vec<Metric>>()                        
+                        .collect::<Vec<Metric>>()
                 })
                 .collect();
-            match self.client.export(ExportMetricsServiceRequest {
-                resource_metrics: vec![
-                    ResourceMetrics {
+            match self
+                .client
+                .export(ExportMetricsServiceRequest {
+                    resource_metrics: vec![ResourceMetrics {
                         resource: None,
                         schema_url: "".to_string(),
-                        instrumentation_library_metrics: vec![
-                            InstrumentationLibraryMetrics {
-                                instrumentation_library: Some(InstrumentationLibrary {
-                                    name: "goodmetrics".to_string(),
-                                    version: "42".to_string(),
-                                }),
-                                schema_url: "".to_string(),
-                                metrics: export_metrics,
-                            }
-                        ],
-                    },
-                ],
-            }).await {
+                        instrumentation_library_metrics: vec![InstrumentationLibraryMetrics {
+                            instrumentation_library: Some(InstrumentationLibrary {
+                                name: "goodmetrics".to_string(),
+                                version: "42".to_string(),
+                            }),
+                            schema_url: "".to_string(),
+                            metrics: export_metrics,
+                        }],
+                    }],
+                })
+                .await
+            {
                 Ok(response) => {
-                    log::debug!("Response from otel: {:?}", response);
-                },
+                    log::info!(
+                        "Sent {} batched calls to otel. Response: {:?}",
+                        api_calls,
+                        response
+                    );
+                }
                 Err(error) => {
                     log::error!("Error from otel: {:?}", error);
-                },
+                }
             }
         }
 
@@ -149,9 +158,9 @@ impl OtelSender {
     }
 }
 
-fn int_data_point(i: i64, nano_time: u64, dimensions: &Vec<KeyValue>) -> NumberDataPoint {
+fn int_data_point(i: i64, nano_time: u64, dimensions: &[KeyValue]) -> NumberDataPoint {
     NumberDataPoint {
-        attributes: dimensions.clone(),
+        attributes: dimensions.to_owned(),
         start_time_unix_nano: 0,
         time_unix_nano: nano_time,
         exemplars: vec![],
@@ -160,9 +169,9 @@ fn int_data_point(i: i64, nano_time: u64, dimensions: &Vec<KeyValue>) -> NumberD
     }
 }
 
-fn float_data_point(f: f64, nano_time: u64, dimensions: &Vec<KeyValue>) -> NumberDataPoint {
+fn float_data_point(f: f64, nano_time: u64, dimensions: &[KeyValue]) -> NumberDataPoint {
     NumberDataPoint {
-        attributes: dimensions.clone(),
+        attributes: dimensions.to_owned(),
         start_time_unix_nano: 0,
         time_unix_nano: nano_time,
         exemplars: vec![],
@@ -171,9 +180,13 @@ fn float_data_point(f: f64, nano_time: u64, dimensions: &Vec<KeyValue>) -> Numbe
     }
 }
 
-fn summary_data_point(ss: crate::proto::goodmetrics::StatisticSet, nano_time: u64, dimensions: &Vec<KeyValue>) -> SummaryDataPoint {
+fn summary_data_point(
+    ss: crate::proto::goodmetrics::StatisticSet,
+    nano_time: u64,
+    dimensions: &[KeyValue],
+) -> SummaryDataPoint {
     SummaryDataPoint {
-        attributes: dimensions.clone(),
+        attributes: dimensions.to_owned(),
         start_time_unix_nano: 0,
         time_unix_nano: nano_time,
         flags: 0,
@@ -192,19 +205,33 @@ fn summary_data_point(ss: crate::proto::goodmetrics::StatisticSet, nano_time: u6
     }
 }
 
-fn histogram_data_point(h: crate::proto::goodmetrics::Histogram, nano_time: u64, dimensions: &Vec<KeyValue>) -> HistogramDataPoint {
+fn histogram_data_point(
+    h: crate::proto::goodmetrics::Histogram,
+    nano_time: u64,
+    dimensions: &[KeyValue],
+) -> HistogramDataPoint {
+    let buckets: BTreeMap<i64, i64> = h.buckets.into_iter().collect();
     HistogramDataPoint {
-        attributes: dimensions.clone(),
+        attributes: dimensions.to_owned(),
         start_time_unix_nano: 0,
         time_unix_nano: nano_time,
         exemplars: vec![],
         flags: 0,
-        count: h.buckets.iter().map(|(_bucket, count)| {*count as u64}).sum(),
+        count: buckets.iter().map(|(_bucket, count)| *count as u64).sum(),
 
         // Sum is not faithfully maintained in goodmetrics. It's approximate, and over-estimated.
-        sum: h.buckets.iter().map(|(bucket, count)| {(bucket * count) as f64}).sum(),
+        sum: buckets
+            .iter()
+            .map(|(bucket, count)| (bucket * count) as f64)
+            .sum(),
 
-        bucket_counts: h.buckets.iter().map(|(_bucket, count)| {*count as u64}).collect(),
-        explicit_bounds: h.buckets.iter().map(|(bucket, _count)| {*bucket as f64}).collect(),
+        bucket_counts: buckets
+            .iter()
+            .map(|(_bucket, count)| *count as u64)
+            .collect(),
+        explicit_bounds: buckets
+            .iter()
+            .map(|(bucket, _count)| *bucket as f64)
+            .collect(),
     }
 }

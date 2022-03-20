@@ -135,7 +135,7 @@ async fn run_server(args: goodmetrics::server::config::options::Options) {
 
     if let Some(otlp_remote_arg) = &args_shared.otlp_remote {
         let cloned_queue = MetricsReceiveQueue {
-            rx: send_queue.tx.subscribe()
+            rx: send_queue.tx.subscribe(),
         };
         let otlp_remote = otlp_remote_arg.clone();
         let bg_handle = std::thread::spawn(move || {

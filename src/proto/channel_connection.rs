@@ -16,9 +16,7 @@ pub async fn get_channel(endpoint: &str) -> Result<Channel, Box<dyn std::error::
         channel = channel.tls_config(tls)?;
     }
 
-    Ok(channel
-        .connect()
-        .await?)
+    Ok(channel.connect().await?)
 }
 
 struct StupidVerifier {}
