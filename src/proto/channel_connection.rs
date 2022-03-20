@@ -16,7 +16,8 @@ pub async fn get_channel(endpoint: &str) -> Result<Channel, Box<dyn std::error::
         channel = channel.tls_config(tls)?;
     }
 
-    Ok(channel.connect().await?)
+    // Lazily connect so the channel will just retry forever, logging errors.
+    Ok(channel.connect_lazy())
 }
 
 struct StupidVerifier {}
