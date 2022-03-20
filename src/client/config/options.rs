@@ -13,7 +13,7 @@ lazy_static! {
 
 #[derive(Debug, Deserialize, Parser)]
 //#[serde(default)]
-#[clap(about = "Good metrics CLI client")]
+#[clap(about = "Goodmetrics CLI client")]
 pub struct Options {
     #[clap(long, default_value = &DEFAULT_DIR)]
     pub config_file: String,

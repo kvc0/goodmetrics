@@ -1,13 +1,41 @@
-# <img src="https://user-images.githubusercontent.com/3454741/151748581-1ad6c34c-f583-4813-b878-d19c98ec3427.png" width="108em" align="center"/> Good Metrics
+# <img src="https://user-images.githubusercontent.com/3454741/151748581-1ad6c34c-f583-4813-b878-d19c98ec3427.png" width="108em" align="center"/> Goodmetrics
 
 This is the way (to record metrics)
 
+# Overview
+## About
+Goodmetrics is for monitoring web service workflows.
+
+Goodmetrics records __observations from workflows__ not __contextless numbers__.
+
+Instead of doing ceremony to conform your workflows to emit interesting data, just record when interesting events
+happen at the point of their occurrence and move on. Goodmetrics creates a wide schema for your application workflow, with a column per dimension
+and a column per measurement.
+
+### Configurations
+**Upstreams**
+* Goodmetrics SDK's. If you're a service developer this is where you look.
+* Prometheus. If you're stuck with this okay.
+
+**Downstreams**
+* TimescaleDB. The good way; with simple, rich and easy to graph wide tables.
+* OpenTelemetry otlp. Strips your measurements' relationships to express them as otel types.
+  (this is for compatibility, it is not an ideal downstream)
+
+### On healing
+Goodmetrics self-heals.
+
+When you have bad data or if someone messes stuff up or whatever - just `drop table problematic_table cascade` and you're good.
+If you change a column's data type (illegal) and you didn't change the name, just `alter table problematic_table drop column problematic_column`. It
+will recreate with the currently-reported type. Failures to self-heal from missing data are bugs; please report them!
 
 # Data model
 
+## TimescaleDB Direct (the good way)
+
 | Goodmetrics type          | Timescale type | about  |
 | :-----:                   | :--:           | ---    |
-| `time`                    | timestamptz    | The 1 required column, used as the time column for hypertables. It is provided by Good Metrics |
+| `time`                    | timestamptz    | The 1 required column, used as the time column for hypertables. It is provided by Goodmetrics |
 | int_dimension             | int8/bigint    | A 64 bit integer |
 | str_dimension             | text           | A label |
 | bool_dimension            | boolean        | A flag |
@@ -18,20 +46,20 @@ This is the way (to record metrics)
 | statistic_set_measurement | statistic_set  | A preaggregated {min,max,sum,count} rollup of some value. Has convenience functions for graphing and rollups. |
 | histogram_measurement     | histogram      | Implemented as jsonb. Has convenience functions for graphing and rollups. |
 
-# Overview
-## About
-Good Metrics is a metrics pipeline especially suited for application metrics.
+## OpenTelemetry (the not-so-good way)
 
-Record _workflows_ not _numbers_. Instead of doing ceremony to conform your workflows to emit interesting data, just record when interesting events
-happen at the point of their occurrence and move on. Good Metrics creates a wide schema for your application workflow, with a column per dimension
-and a column per measurement.
-
-### On healing
-Good Metrics self-heals.
-
-When you have bad data or if someone messes stuff up or whatever - just `drop table problematic_table cascade` and you're good.
-If you change a column's data type (illegal) and you didn't change the name, just `alter table problematic_table drop column problematic_column`. It
-will recreate with the currently-reported type. Failures to self-heal from missing data are bugs; please report them!
+| Goodmetrics type          | OpenTelemetry Metrics type | about  |
+| :-----:                   | :--:                       | ---    |
+| `time`                    | time_unix_nano             | Goodmetrics clients timestamp at the start of their workflows by default |
+| int_dimension             | Int attribute              | A 64 bit integer |
+| str_dimension             | String attribute           | A label |
+| bool_dimension            | Bool attribute             | A flag |
+| i64                       | Number data point (i64)    | A 64 bit integer |
+| i32                       | Number data point (i64)    | OpenTelemetry only represents 64 bit long integers - no 32 bit ints |
+| f64                       | Number data point (f64)    | A 64 bit floating point number |
+| f32                       | Number data point (f64)    | OpenTelemetry only represents 64 bit double precision - no single precision floats. |
+| statistic_set_measurement | Summary data point         | Quantiles 0.0 and 1.0 are populated for min and max. Sum is approximate (over-shoots, computed from buckets). Count is exact. |
+| histogram_measurement     | Histogram data point       | Delta temporality only. There is no sense in anything else for services. |
 
 # Clients
 * [Kotlin](https://github.com/WarriorOfWire/goodmetrics_kotlin)
@@ -159,16 +187,19 @@ When writing a real application for real users, however, you often have
 other dimensions that are variously diagnostic, speculative, informative
 or accidental (!!). Databases like Influx often find themselves
 irreparably polluted by a programming mistake which tagged data with an
-unintentional value.
+unintentional value (ask me how i know :-().
 
 Consider 50 servers, 30 apis (or web pages), 80k users, a geo location
 (let's say 15/user), a logged-in/anonymous bit, and 12 measurements per
 api. In naive systems, this is modeled as over **40 billion** distinct
 series unless you de-relate your data. Go ahead and check the cost of
 that cardinality in cloudwatch! You'll have a rough time with any time
-series storage engine that stores series this way.
+series storage engine that stores series the tag-set way. You won't even
+be able to make reasonable use of it due to the amount of time the tag
+queries take! If you use TimeStream you'll run out of money over rich
+service metrics. Do the math on their pricing worksheet and see.
 
-Instead, if you model these interactions as Good Metrics, you'll have
+Instead, if you model these interactions as Goodmetrics, you'll have
 1 bag of measurements and dimensions per api/web page load. You can also
 pre-aggregate the data if you've got some high frequency stuff to record.
 You don't have to but it's an option if you don't want a massive database.
@@ -176,7 +207,8 @@ You don't have to but it's an option if you don't want a massive database.
 Not only that, your data remains related. You can pivot your measurements
 by any dimension or value threshold, because you are standing on the shoulders
 of decades of great minds investing in PostgresQL. It might sound sexy to
-reinvent time series data storage, but most of the time... "good" is best.
+reinvent time series data storage, but for service monitoring... "boring" is
+good.
 
 ## Not perfect huh?
 You could make every single stack in your application a unit of work and emit
@@ -191,18 +223,18 @@ from your application to construct, track, serialize and emit details about ever
 API invocation from your system. If you can afford this whether because your rate is
 low or your budget is immense, it's a very powerful way to observe a system.
 
-Good Metrics units of work are more like a trace with only 1 level - and no
-intermediate filter server. Good Metrics can be pre-aggregated on the reporting
+Goodmetrics units of work are more like a trace with only 1 level - and no
+intermediate filter server. Goodmetrics can be pre-aggregated on the reporting
 server as well, to keep row rate very low and dashboards maximally responsive.
 
-# About
-## General - White box metrics
+# General
+## On white box metrics
 While you can handle all of your prometheus-esque counters and gauges,
-Good Metrics is not ideally suited for modeling hierarchical traces.
-The intended use case for Good Metrics is a "unit of work" inside of
+Goodmetrics is not ideally suited for modeling hierarchical traces.
+The intended use case for Goodmetrics is a "unit of work" inside of
 your application.
 
-You want Good Metrics for white box metrics: For recording features of a
+You want Goodmetrics for white box metrics: For recording features of a
 workflow (dimensions like `user_id`, `upstream_service` and `upstream_response`)
 and observations from that workflow (measurements like `db_latency` and
 `request_bytes`).
@@ -211,20 +243,20 @@ Remember that your white-box metrics will change. You will need more dimensions
 and more measurements down the road. If your series count explodes by a factor
 of the cardinality of a new dimension, you may not be able to add a new dimension
 down the road. In my experience you tend to learn that _after_ adding that dimension
-and having a bad day. With Good Metrics and Timescale, a poison dimension value
+and having a bad day. With Goodmetrics and Timescale, a poison dimension value
 might make a particular time range in your dashboards very hard to use but after
 fixing the poison source, it will heal.
 
-### On failure recovery
-Good Metrics are for operational visibility, not for perfect billing or financial
+## On failure recovery
+Goodmetrics are for operational visibility, not for perfect billing or financial
 records. It will drop data when there is a problem it can't recover from or when
 the database is down. This is to keep the metrics data flow pipeline as close to
-normal at all times as possible. Good Metrics are best-effort. Generally that
+normal at all times as possible. Goodmetrics are best-effort. Generally that
 effort should work out and the goal should always be to put data where it belongs
 but for the sake of availability and performance, perfection is relaxed.
 
 Poison dimension names / unlimited name cardinality is a degenerate failure case
-with Good Metrics, but can be sorted quickly with `drop table poisoned_table` if
+with Goodmetrics, but can be sorted quickly with `drop table poisoned_table` if
 you don't want to deal with it more surgically.
 
 Similarly, a full disk condition can be recovered gracefully, in the manner of a
@@ -232,17 +264,20 @@ proper ACID database. Contrast this other self-hosted "time series" stores.
 
 In general, if something is wrong - a bad table, a misnamed column or a column
 with the wrong data type - you can just delete the offending table or column.
-Good Metrics tries to self-heal all the time. In fact, a newly encountered metrics
+Goodmetrics tries to self-heal all the time. In fact, a newly encountered metrics
 table is just a table with a bunch of missing columns that will be healed as the
 columns and data types are encountered.
 
 Schema management is a failure recovery feature.
 
 ## A white-box unit of work
-What a "unit of work" is depends wholly on your application. Some examples:
+What a "unit of work" or "workflow" is depends wholly on your application. Some examples:
 
 ### A web server
 * One unit of work would be an individual invocation of the GET() handler.
+  Add your user or header dimensions at the start of the handler and record
+  the things you want where they happen. A Metrics object is a cheap blob
+  that accumulates all the observations from a workflow's execution.
 * Another would be a background job that runs on a timer to refresh a cache
   or do some database tracing.
 
