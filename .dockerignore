@@ -1,0 +1,9 @@
+# Ignore everything
+*
+
+# Whitelists
+!src
+!proto
+!Cargo*
+!build.rs
+!.dockerignore

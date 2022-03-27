@@ -75,7 +75,9 @@ async fn get_identity(
 
 fn main() {
     let args = get_args();
-    console_subscriber::init();
+    if args.tokio_console {
+        console_subscriber::init();
+    }
 
     env_logger::Builder::from_env(
         env_logger::Env::default()

@@ -12,6 +12,11 @@ pub struct Options {
     pub max_threads: usize,
     #[clap(long, default_value = "debug")]
     pub log_level: String,
+    #[clap(
+        long,
+        help = "enable the tokio-console listener? (doesn't work on docker)"
+    )]
+    pub tokio_console: bool,
 
     // File path to the private key.
     #[clap(long, default_value = "")]
