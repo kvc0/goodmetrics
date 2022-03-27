@@ -14,7 +14,7 @@ and a column per measurement.
 
 ## Getting started
 ### **Run the server**
-You can use the latest release or you can use the fail whale via
+You can use the latest release's `goodmetricsd` or you can use the fail whale via
 ```
 # Or instead of -p you can --network host
 docker run --name goodmetrics -p 9573:9573 --detach warriorofwire/goodmetrics -- \
