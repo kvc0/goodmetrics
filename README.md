@@ -12,6 +12,55 @@ Instead of doing ceremony to conform your workflows to emit interesting data, ju
 happen at the point of their occurrence and move on. Goodmetrics creates a wide schema for your application workflow, with a column per dimension
 and a column per measurement.
 
+## Getting started
+### **Run the server**
+You can use the latest release or you can use the fail whale via
+```
+# Or instead of -p you can --network host
+docker run --name goodmetrics -p 9573:9573 --detach warriorofwire/goodmetrics -- \
+  --connection-string 'host=postgres_server_ip_address port=2345 user=metrics password=metrics'
+```
+### **Send metrics**
+Use an SDK or just invoke the latest release's `goodmetrics` cli utility.
+Here's an example sending 2 observations of the same metric with a few dimensions and a few different
+measurement types:
+```
+goodmetrics send '
+{
+  "metric":"test_api",
+  "unix_nanos":'`date +%s`'000000000,
+  "dimensions":{
+    "a_string_dimension":{"value":{"String":"asdf"}},
+    "an_integer_dimension":{"value":{"Number":16}},
+    "a_boolean_dimension":{"value":{"Boolean":true}}
+  },
+  "measurements":{
+    "an_int_measurement":{"value":{"I32":42}},
+    "a_long_measurement":{"value":{"I64":42}},
+    "a_float_measurement":{"value":{"F32":42.42}},
+    "a_double_measurement":{"value":{"F64":42.42}},
+    "a_statistic_set":{"value":{"StatisticSet": {"minimum":1, "maximum":2, "samplesum":8, "samplecount":6}}},
+    "a_histogram":{"value":{"Histogram":{"buckets":{"1":2, "3":4, "5":6}}}}
+  }
+} ' '{
+  "metric":"test_api",
+  "unix_nanos":'`date +%s`'000000000,
+  "dimensions":{
+    "a_string_dimension":{"value":{"String":"asdf"}},
+    "an_integer_dimension":{"value":{"Number":16}},
+    "a_boolean_dimension":{"value":{"Boolean":true}}
+  },
+  "measurements":{
+    "an_int_measurement":{"value":{"I32":42}},
+    "a_long_measurement":{"value":{"I64":42}},
+    "a_float_measurement":{"value":{"F32":42.42}},
+    "a_double_measurement":{"value":{"F64":42.42}},
+    "a_statistic_set":{"value":{"StatisticSet": {"minimum":1, "maximum":2, "samplesum":8, "samplecount":6}}},
+    "a_histogram":{"value":{"Histogram":{"buckets":{"1":2, "3":4, "5":6}}}}
+  }
+}'
+```
+
 ### Configurations
 **Upstreams**
 * Goodmetrics SDK's. If you're a service developer this is where you look.
