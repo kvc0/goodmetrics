@@ -2,9 +2,8 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use tokio::time::{sleep, timeout_at, Instant};
-use tonic::transport::Channel;
 
-use crate::proto::channel_connection::get_channel;
+use crate::proto::channel_connection::{get_channel, ChannelType};
 use crate::proto::opentelemetry::collector::metrics::v1::metrics_service_client::MetricsServiceClient;
 use crate::proto::opentelemetry::collector::metrics::v1::ExportMetricsServiceRequest;
 use crate::proto::opentelemetry::common::v1::{
@@ -21,15 +20,16 @@ use super::{metricssendqueue::MetricsReceiveQueue, sink_error::SinkError};
 
 pub struct OtelSender {
     rx: MetricsReceiveQueue,
-    client: MetricsServiceClient<Channel>,
+    client: MetricsServiceClient<ChannelType>,
 }
 
 impl OtelSender {
     pub async fn new_connection(
         opentelemetry_endpoint: &str,
         rx: MetricsReceiveQueue,
+        insecure: bool,
     ) -> Result<OtelSender, SinkError> {
-        let client = match get_channel(opentelemetry_endpoint).await {
+        let client = match get_channel(opentelemetry_endpoint, insecure).await {
             Ok(channel) => MetricsServiceClient::new(channel),
             Err(e) => {
                 return Err(SinkError::StringError(StringError {

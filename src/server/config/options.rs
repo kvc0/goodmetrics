@@ -34,8 +34,16 @@ pub struct Options {
     )]
     pub connection_string: Option<String>,
 
-    #[clap(long, help = "Example: https://my.opentelemetry:4317")]
+    #[clap(
+        long,
+        help = "Send dumbed down metrics via otel metrics format. Example: https://my.opentelemetry:4317"
+    )]
     pub otlp_remote: Option<String>,
+    #[clap(
+        long,
+        help = "Skip server certificate verification for opentelemetry remote"
+    )]
+    pub otlp_insecure: bool,
 }
 
 pub fn get_args() -> Options {

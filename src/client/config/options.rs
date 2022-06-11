@@ -32,6 +32,11 @@ pub enum Subcommand {
     Send {
         #[clap(parse(try_from_str = serde_json::from_str))]
         metrics: Vec<Datum>,
+        #[clap(
+            long,
+            help = "send to a goodmetrics server without validating the certificate"
+        )]
+        insecure: bool,
     },
     #[clap(about = "Poll prometheus metrics")]
     PollPrometheus {
@@ -45,6 +50,12 @@ pub enum Subcommand {
 
         #[clap(long, default_value = "10")]
         interval_seconds: u32,
+
+        #[clap(
+            long,
+            help = "send to a goodmetrics server without validating the certificate"
+        )]
+        insecure: bool,
 
         #[clap(long, default_value = "{}", parse(try_from_str = serde_json::from_str))]
         bonus_dimensions: HashMap<String, Dimension>,

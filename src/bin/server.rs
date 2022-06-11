@@ -135,6 +135,7 @@ async fn run_server(args: goodmetrics::server::config::options::Options) {
         handlers.push(bg_handle);
     }
 
+    let insecure_otlp = args_shared.otlp_insecure;
     if let Some(otlp_remote_arg) = &args_shared.otlp_remote {
         let cloned_queue = MetricsReceiveQueue {
             rx: send_queue.tx.subscribe(),
@@ -146,7 +147,7 @@ async fn run_server(args: goodmetrics::server::config::options::Options) {
                 .enable_all()
                 .build()
                 .unwrap()
-                .block_on(consume_otel(otlp_remote, cloned_queue))
+                .block_on(consume_otel(otlp_remote, cloned_queue, insecure_otlp))
                 .unwrap();
         });
         handlers.push(bg_handle);
@@ -175,14 +176,16 @@ async fn consume_postgres(
 async fn consume_otel(
     opentelemetry_endpoint: String,
     receive_queue: MetricsReceiveQueue,
+    insecure: bool,
 ) -> Result<(), SinkError> {
-    let sender = match OtelSender::new_connection(&opentelemetry_endpoint, receive_queue).await {
-        Ok(sender) => sender,
-        Err(e) => {
-            log::error!("failed to start otel sender: {:?}", e);
-            std::process::exit(3)
-        }
-    };
+    let sender =
+        match OtelSender::new_connection(&opentelemetry_endpoint, receive_queue, insecure).await {
+            Ok(sender) => sender,
+            Err(e) => {
+                log::error!("failed to start otel sender: {:?}", e);
+                std::process::exit(3)
+            }
+        };
     sender.consume_stuff().await?;
     Ok(())
 }

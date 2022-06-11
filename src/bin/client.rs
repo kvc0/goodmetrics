@@ -13,10 +13,13 @@ async fn main() {
     .init();
 
     match args.command {
-        Subcommand::Send { metrics } => send_metrics(metrics, &args.goodmetrics_server).await,
+        Subcommand::Send { metrics, insecure } => {
+            send_metrics(metrics, &args.goodmetrics_server, insecure).await
+        }
         Subcommand::PollPrometheus {
             poll_endpoint,
             interval_seconds,
+            insecure,
             bonus_dimensions,
             prefix,
         } => {
@@ -26,6 +29,7 @@ async fn main() {
                 bonus_dimensions,
                 underscore_suffix(prefix),
                 &args.goodmetrics_server,
+                insecure,
             )
             .await
         }

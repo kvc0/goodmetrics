@@ -19,6 +19,7 @@ pub async fn poll_prometheus(
     bonus_dimensions: HashMap<String, Dimension>,
     table_prefix: String,
     goodmetrics_endpoint: &str,
+    insecure_goodmetrics: bool,
 ) {
     log::info!("polling: {} every: {}s", poll_endpoint, interval_seconds);
     let mut interval = time::interval(time::Duration::from_secs(interval_seconds as u64));
@@ -37,9 +38,9 @@ pub async fn poll_prometheus(
             Ok(datums) => {
                 log::debug!("lines: {:?}", datums);
 
-                match get_channel(goodmetrics_endpoint).await {
+                match get_channel(goodmetrics_endpoint, insecure_goodmetrics).await {
                     Ok(channel) => {
-                        log::debug!("connected: {:?}", channel);
+                        log::debug!("connected: {}", goodmetrics_endpoint);
                         let mut client = MetricsClient::new(channel);
                         let result = client
                             .send_metrics(MetricsRequest {
