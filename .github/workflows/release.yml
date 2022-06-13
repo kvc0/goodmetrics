@@ -157,4 +157,4 @@ jobs:
         uses: docker/build-push-action@v2
         with:
           push: ${{ github.event.inputs.releasedocker }}
-          tags: warriorofwire/goodmetrics:latest,warriorofwire/goodmetrics:${{ github.event.inputs.version }}
+          tags: kvc0/goodmetrics:latest,kvc0/goodmetrics:${{ github.event.inputs.version }}
