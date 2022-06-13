@@ -1,6 +1,8 @@
-FROM rust:1.59 as build
+FROM rust:1.61 as build
 
 RUN rustup component add rustfmt
+RUN apt-get update
+RUN apt-get install -y protobuf-compiler
 
 WORKDIR /usr/src/goodmetrics
 COPY . .
