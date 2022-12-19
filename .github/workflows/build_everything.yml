@@ -1,8 +1,5 @@
 name: Build everything
 
-# Based on the Rezolus workflow: https://github.com/twitter/rezolus/blob/master/.github/workflows/cargo.yml
-# Thanks for the reference, Brian.
-
 on:
   push:
     branches: [ main ]
@@ -29,7 +26,9 @@ jobs:
     - name: install clippy
       run: rustup component add clippy
     - name: clippy
-      run: cargo clippy --all-targets --all-features -- -D warnings
+      run:
+        ./install_protoc.sh
+        cargo clippy --all-targets --all-features -- -D warnings
   macos:
     name: macos
     runs-on: macos-latest
@@ -37,7 +36,9 @@ jobs:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v1
       - name: Build
-        run: cargo build --release
+        run:
+          ./install_protoc.sh
+          cargo build --release
   # musl:
   #   name: musl
   #   runs-on: ubuntu-20.04
@@ -59,4 +60,6 @@ jobs:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v1
       - name: build
-        run: cargo build --release
+        run:
+          ./install_protoc.sh
+          cargo build --release
