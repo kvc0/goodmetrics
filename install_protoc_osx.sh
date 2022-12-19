@@ -20,4 +20,4 @@ pushd temp
 popd
 rm -rf temp
 
-tree /usr/local/include/google
+# tree /usr/local/include/google
