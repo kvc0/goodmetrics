@@ -15,7 +15,7 @@ lazy_static! {
 //#[serde(default)]
 #[clap(about = "Goodmetrics CLI client")]
 pub struct Options {
-    #[clap(long, default_value = &DEFAULT_DIR)]
+    #[clap(long, default_value = &**DEFAULT_DIR)]
     pub config_file: String,
     #[clap(long, default_value = "https://localhost:9573")]
     pub goodmetrics_server: String,
@@ -30,9 +30,9 @@ pub struct Options {
 pub enum Subcommand {
     #[clap(about = "Send measurements")]
     Send {
-        #[clap(parse(try_from_str = serde_json::from_str))]
+        #[arg(value_parser = parse_metrics)]
         metrics: Vec<Datum>,
-        #[clap(
+        #[arg(
             long,
             help = "send to a goodmetrics server without validating the certificate"
         )]
@@ -40,24 +40,32 @@ pub enum Subcommand {
     },
     #[clap(about = "Poll prometheus metrics")]
     PollPrometheus {
-        #[clap(
+        #[arg(
             help = "Prefix all the tables emitted by this prometheus reporter. This way you can put things like per-server host metrics under a host_* or node_* prefix."
         )]
         prefix: String,
 
-        #[clap(default_value = "http://127.0.0.1:9100/metrics")]
+        #[arg(default_value = "http://127.0.0.1:9100/metrics")]
         poll_endpoint: String,
 
-        #[clap(long, default_value = "10")]
+        #[arg(long, default_value = "10")]
         interval_seconds: u32,
 
-        #[clap(
+        #[arg(
             long,
             help = "send to a goodmetrics server without validating the certificate"
         )]
         insecure: bool,
 
-        #[clap(long, default_value = "{}", parse(try_from_str = serde_json::from_str))]
+        #[arg(long, default_value = "{}", value_parser = parse_dimensions)]
         bonus_dimensions: HashMap<String, Dimension>,
     },
+}
+
+fn parse_dimensions(value: &str) -> anyhow::Result<HashMap<String, Dimension>> {
+    serde_json::from_str(value).map_err(|e| anyhow::anyhow!("could not parse dimensions: {e:?}"))
+}
+
+fn parse_metrics(value: &str) -> anyhow::Result<Datum> {
+    serde_json::from_str(value).map_err(|e| anyhow::anyhow!("could not parse metrics: {e:?}"))
 }

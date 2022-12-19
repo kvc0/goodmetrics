@@ -217,7 +217,7 @@ fn histogram_data_point(
         time_unix_nano: nano_time,
         exemplars: vec![],
         flags: 0,
-        count: buckets.iter().map(|(_bucket, count)| *count as u64).sum(),
+        count: buckets.values().map(|count| *count as u64).sum(),
 
         // Sum is not faithfully maintained in goodmetrics. It's approximate, and over-estimated.
         sum: buckets
@@ -225,13 +225,7 @@ fn histogram_data_point(
             .map(|(bucket, count)| (bucket * count) as f64)
             .sum(),
 
-        bucket_counts: buckets
-            .iter()
-            .map(|(_bucket, count)| *count as u64)
-            .collect(),
-        explicit_bounds: buckets
-            .iter()
-            .map(|(bucket, _count)| *bucket as f64)
-            .collect(),
+        bucket_counts: buckets.values().map(|count| *count as u64).collect(),
+        explicit_bounds: buckets.keys().map(|bucket| *bucket as f64).collect(),
     }
 }
