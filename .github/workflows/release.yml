@@ -51,7 +51,7 @@ jobs:
       - uses: Swatinem/rust-cache@v1
       - name: Build
         run:
-          ./install_protoc.sh
+          ./install_protoc_osx.sh
           cargo build --release
       - name: tar
         run: |
