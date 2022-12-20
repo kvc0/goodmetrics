@@ -1,4 +1,4 @@
-use postgres_types::Type;
+use postgres_types::{FromSql, ToSql, Type};
 use tokio_postgres::{error::SqlState, Client, GenericClient};
 
 use crate::server::sink::sink_error::SinkError;
@@ -50,6 +50,26 @@ async fn get_statistic_set_type(client: &Client) -> Result<Type, tokio_postgres:
             Ok(statistic_set_type)
         }
         Err(e) => Err(e),
+    }
+}
+
+#[derive(ToSql, FromSql, Debug)]
+#[postgres(name = "statistic_set")]
+pub struct SqlStatisticSet {
+    minimum: f64,
+    maximum: f64,
+    samplesum: f64,
+    samplecount: i64,
+}
+
+impl From<crate::proto::goodmetrics::StatisticSet> for SqlStatisticSet {
+    fn from(value: crate::proto::goodmetrics::StatisticSet) -> Self {
+        Self {
+            minimum: value.minimum,
+            maximum: value.maximum,
+            samplesum: value.samplesum,
+            samplecount: value.samplecount as i64,
+        }
     }
 }
 

@@ -6,14 +6,6 @@ fn main() {
     tonic_build::configure()
         .build_server(true)
         .type_attribute(".", "#[derive(serde::Deserialize, serde::Serialize)]")
-        .type_attribute(
-            "goodmetrics.StatisticSet",
-            "#[derive(postgres_types::ToSql, postgres_types::FromSql)]",
-        )
-        .type_attribute(
-            "goodmetrics.StatisticSet",
-            r#"#[postgres(name = "statistic_set")]"#,
-        )
         .file_descriptor_set_path(out_dir.join("goodmetrics_descriptor.bin"))
         .compile(&["proto/metrics/goodmetrics.proto"], &["proto"])
         .unwrap();

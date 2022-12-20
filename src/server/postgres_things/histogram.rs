@@ -55,7 +55,7 @@ async fn get_histogram_type(client: &Client) -> Result<Type, tokio_postgres::Err
 
 impl Histogram {
     pub fn to_stupidmap(&self) -> serde_json::Value {
-        let a: HashMap<String, i64> = self
+        let a: HashMap<String, u64> = self
             .buckets
             .iter()
             .map(|(k, v)| (k.to_string(), *v))

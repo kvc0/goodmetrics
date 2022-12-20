@@ -338,8 +338,8 @@ fn read_histogram(
                         }
                     }
                 };
-                let raw_count: i64 = match capture.name("count") {
-                    Some(c) => c.as_str().parse::<i64>().unwrap_or(0),
+                let raw_count: u64 = match capture.name("count") {
+                    Some(c) => c.as_str().parse::<u64>().unwrap_or(0),
                     None => {
                         return LineState {
                             complete_datum: None,
@@ -357,7 +357,7 @@ fn read_histogram(
                         };
                     }
                 };
-                let values_below_bucket: i64 = histogram
+                let values_below_bucket: u64 = histogram
                     .buckets
                     .iter()
                     .map(|(k, v)| if (*k as f64) < raw_bucket { *v } else { 0 })

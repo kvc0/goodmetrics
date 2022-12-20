@@ -190,7 +190,7 @@ fn summary_data_point(
         start_time_unix_nano: 0,
         time_unix_nano: nano_time,
         flags: 0,
-        count: ss.samplecount as u64,
+        count: ss.samplecount,
         sum: ss.samplesum,
         quantile_values: vec![
             summary_data_point::ValueAtQuantile {
@@ -210,22 +210,22 @@ fn histogram_data_point(
     nano_time: u64,
     dimensions: &[KeyValue],
 ) -> HistogramDataPoint {
-    let buckets: BTreeMap<i64, i64> = h.buckets.into_iter().collect();
+    let buckets: BTreeMap<i64, u64> = h.buckets.into_iter().collect();
     HistogramDataPoint {
         attributes: dimensions.to_owned(),
         start_time_unix_nano: 0,
         time_unix_nano: nano_time,
         exemplars: vec![],
         flags: 0,
-        count: buckets.values().map(|count| *count as u64).sum(),
+        count: buckets.values().sum(),
 
         // Sum is not faithfully maintained in goodmetrics. It's approximate, and over-estimated.
         sum: buckets
             .iter()
-            .map(|(bucket, count)| (bucket * count) as f64)
+            .map(|(bucket, count)| (bucket * *count as i64) as f64)
             .sum(),
 
-        bucket_counts: buckets.values().map(|count| *count as u64).collect(),
+        bucket_counts: buckets.values().copied().collect(),
         explicit_bounds: buckets.keys().map(|bucket| *bucket as f64).collect(),
     }
 }

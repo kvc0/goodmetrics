@@ -5,7 +5,6 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use crate::proto::goodmetrics::{dimension, measurement, Datum, Dimension, Measurement};
 use crate::server::{
     postgres_things::{
         ddl::{self, clean_id},
@@ -15,6 +14,10 @@ use crate::server::{
         type_conversion::TypeConverter,
     },
     sink::sink_error::{DescribedError, MissingColumn, MissingTable},
+};
+use crate::{
+    proto::goodmetrics::{dimension, measurement, Datum, Dimension, Measurement},
+    server::postgres_things::statistic_set::SqlStatisticSet,
 };
 use bb8::PooledConnection;
 use bb8_postgres::PostgresConnectionManager;
@@ -359,8 +362,9 @@ async fn write_and_close(
                     measurement::Value::I32(i) => Box::new(i),
                     measurement::Value::F64(f) => Box::new(f),
                     measurement::Value::F32(f) => Box::new(f),
-                    // measurement::Value::StatisticSet(s) => Box::new((s.minimum, s.maximum, s.samplesum, s.samplecount)),
-                    measurement::Value::StatisticSet(s) => Box::new(s),
+                    measurement::Value::StatisticSet(s) => {
+                        Box::<SqlStatisticSet>::new(s.clone().into())
+                    }
                     measurement::Value::Histogram(h) => Box::new(h.to_stupidmap()),
                 })
             } else {
