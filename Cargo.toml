@@ -42,7 +42,8 @@ rcgen = { version = "0.10.0" }
 serde = {version = "1.0.151", features = ["derive"]}
 serde_derive = {version = "1.0.151"}
 serde_json = {version = "1.0.91"}
-reqwest = { version = "0.11.13", features = [] }
+# Disable the default-tls feature. It brings in openssl via native-tls which depends on openssl 1.1. But new ubuntu has v3...
+reqwest = { version = "0.11.13", default-features = false, features = [] }
 
 clap = {version = "4.0.29", features = ["derive"]}
 # structopt-toml = {version = "0.5.0"}

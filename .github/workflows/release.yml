@@ -94,7 +94,7 @@ jobs:
   #         path: ./goodmetrics-linux.x86_64.tar.gz
   ubuntu:
     name: ubuntu
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v1
@@ -116,7 +116,7 @@ jobs:
 
   upload-release:
     name: upload release
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs:
       - ubuntu
       - macos
