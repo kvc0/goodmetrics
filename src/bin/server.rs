@@ -84,7 +84,12 @@ async fn serve(
             },
         ))
     };
+    let reflection = tonic_reflection::server::Builder::configure()
+        .register_encoded_file_descriptor_set(goodmetrics::proto::goodmetrics::DESCRIPTOR)
+        .build()?;
+    let service_router = service_router.add_service(reflection);
 
+    log::info!("entering serve function");
     service_router.serve_with_incoming(incoming).await.unwrap();
 
     Ok(())

@@ -20,6 +20,7 @@ console-subscriber = { version = "0.1.8" }
 
 hyper = { version = "0.14.23", features = ["full"] }
 tonic = { version = "0.8.3", features = ["tls"]} # , "compression" broken by console-subscriber=0.1.6
+tonic-reflection = { version = "0.6.0" }
 tower = { version = "0.4.13" }
 webpki = { version = "0.22.0" }
 rustls-native-certs = { version = "0.6.2" }
