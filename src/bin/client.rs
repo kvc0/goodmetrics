@@ -14,7 +14,13 @@ async fn main() {
 
     match args.command {
         Subcommand::Send { metrics, insecure } => {
-            send_metrics(metrics, &args.goodmetrics_server, insecure).await
+            send_metrics(
+                metrics,
+                &args.goodmetrics_server,
+                insecure,
+                args.authorization,
+            )
+            .await
         }
         Subcommand::PollPrometheus {
             poll_endpoint,

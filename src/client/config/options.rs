@@ -21,6 +21,12 @@ pub struct Options {
     pub goodmetrics_server: String,
     #[clap(long, default_value = "info")]
     pub log_level: String,
+    #[clap(
+        long,
+        short,
+        help = "Authorization token to use - if the remote server expects this"
+    )]
+    pub authorization: Option<String>,
 
     #[clap(subcommand)]
     pub command: Subcommand,

@@ -9,6 +9,7 @@ use goodmetrics::server::sink::{
 };
 use tonic::transport::{Identity, Server, ServerTlsConfig};
 
+use std::collections::HashSet;
 use std::{cmp::min, net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
 
@@ -42,13 +43,49 @@ async fn serve(
 
     let identity = get_identity(&args).await?;
 
-    let grpc_server = MetricsServer::new(one_server_thread);
-    Server::builder()
-        .tls_config(ServerTlsConfig::new().identity(identity))?
-        .add_service(grpc_server)
-        .serve_with_incoming(incoming)
-        .await
-        .unwrap();
+    let keys: HashSet<String> = args
+        .api_keys
+        .iter()
+        .map(|k| k.trim().to_string())
+        .filter(|k| !k.is_empty())
+        .collect();
+
+    let mut server_builder =
+        Server::builder().tls_config(ServerTlsConfig::new().identity(identity))?;
+
+    let service_router = if keys.is_empty() {
+        log::info!("configuring unauthorized metrics server");
+        server_builder.add_service(MetricsServer::new(one_server_thread))
+    } else {
+        log::info!(
+            "configuring authorized metrics server with {} access keys",
+            keys.len()
+        );
+        server_builder.add_service(MetricsServer::with_interceptor(
+            one_server_thread,
+            move |request: tonic::Request<()>| match request.metadata().get("authorization") {
+                Some(authorization_header) => match authorization_header.to_str() {
+                    Ok(token) => {
+                        if keys.contains(token) {
+                            Ok(request)
+                        } else {
+                            Err(tonic::Status::unauthenticated(
+                                "authorization token is not allowed",
+                            ))
+                        }
+                    }
+                    Err(e) => Err(tonic::Status::invalid_argument(format!(
+                        "authorization token is not well-formed: {e:?}"
+                    ))),
+                },
+                None => Err(tonic::Status::unauthenticated(
+                    "authorization token is required",
+                )),
+            },
+        ))
+    };
+
+    service_router.serve_with_incoming(incoming).await.unwrap();
 
     Ok(())
 }

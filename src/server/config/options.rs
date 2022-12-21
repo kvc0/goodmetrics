@@ -18,15 +18,25 @@ pub struct Options {
     )]
     pub tokio_console: bool,
 
-    // File path to the private key.
-    #[clap(long, default_value = "")]
+    #[clap(long, default_value = "", help = "File path to the private key.")]
     pub cert_private_key: String,
-    // File path to the private key's public certificate.
-    #[clap(long, default_value = "")]
+    #[clap(
+        long,
+        default_value = "",
+        help = "File path to the private key's public certificate."
+    )]
     pub cert: String,
-    // hostname to use for a self-signed host
-    #[clap(long, default_value = "localhost")]
+    #[clap(
+        long,
+        default_value = "localhost",
+        help = "hostname to use for a self-signed host"
+    )]
     pub self_signed_hostname: String,
+    #[clap(
+        long,
+        help = "api keys allowed to access the service. If none are supplied, then no extra authorization happens"
+    )]
+    pub api_keys: Vec<String>,
 
     #[clap(
         long,
