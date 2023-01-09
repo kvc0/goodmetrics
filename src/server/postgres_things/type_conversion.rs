@@ -8,6 +8,7 @@ use crate::proto::goodmetrics::{dimension, measurement, Datum, Dimension, Measur
 pub struct TypeConverter {
     pub statistic_set_type: Type,
     pub histogram_type: Type,
+    pub tdigest_type: Type,
 }
 
 impl TypeConverter {
@@ -19,6 +20,7 @@ impl TypeConverter {
             measurement::Value::F32(_) => Type::FLOAT4,
             measurement::Value::StatisticSet(_) => self.statistic_set_type.clone(),
             measurement::Value::Histogram(_) => Type::JSONB,
+            measurement::Value::Tdigest(_) => self.tdigest_type.clone(),
         })
     }
 

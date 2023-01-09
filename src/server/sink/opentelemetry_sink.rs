@@ -116,6 +116,9 @@ impl OtelSender {
                                                 histogram_data_point(h, datum.unix_nanos, &dimensions),
                                             ],
                                         }),
+                                        crate::proto::goodmetrics::measurement::Value::Tdigest(t) => {
+                                            unimplemented!("tdigest for opentelemetry is not supported: {t:?}")
+                                        },
                                     }),
                                 }
                             })

@@ -18,6 +18,18 @@ pub enum SinkError {
 
     #[error("i gotta have more table")]
     MissingTable(#[from] MissingTable),
+
+    #[error("something else happened")]
+    OtherError(#[from] OtherError),
+}
+
+impl SinkError {
+    pub fn other(message: impl Into<String>, inner: Box<dyn std::error::Error>) -> SinkError {
+        SinkError::OtherError(OtherError {
+            message: message.into(),
+            inner,
+        })
+    }
 }
 
 #[derive(Debug, Error)]
@@ -29,6 +41,21 @@ pub struct DescribedError {
 impl Display for DescribedError {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         fmt.debug_struct("DescribedError")
+            .field("message", &self.message)
+            .field("cause", &self.inner)
+            .finish()
+    }
+}
+
+#[derive(Debug, Error)]
+pub struct OtherError {
+    pub message: String,
+    pub inner: Box<dyn std::error::Error>,
+}
+
+impl Display for OtherError {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fmt.debug_struct("OtherError")
             .field("message", &self.message)
             .field("cause", &self.inner)
             .finish()

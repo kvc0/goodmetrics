@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use postgres_types::{FromSql, ToSql, Type};
 use tokio_postgres::{error::SqlState, Client, GenericClient};
 
@@ -60,6 +62,15 @@ pub struct SqlStatisticSet {
     maximum: f64,
     samplesum: f64,
     samplecount: i64,
+}
+
+impl Display for SqlStatisticSet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!(
+            "({},{},{},{})",
+            self.minimum, self.maximum, self.samplesum, self.samplecount,
+        ))
+    }
 }
 
 impl From<crate::proto::goodmetrics::StatisticSet> for SqlStatisticSet {

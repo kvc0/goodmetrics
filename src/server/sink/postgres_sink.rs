@@ -11,6 +11,7 @@ use crate::server::{
         histogram::get_or_create_histogram_type,
         postgres_connector::PostgresConnector,
         statistic_set::get_or_create_statistic_set_type,
+        tdigest::SqlTdigest,
         type_conversion::TypeConverter,
     },
     sink::sink_error::{DescribedError, MissingColumn, MissingTable},
@@ -21,7 +22,7 @@ use crate::{
 };
 use bb8::PooledConnection;
 use bb8_postgres::PostgresConnectionManager;
-use futures::pin_mut;
+use futures::{pin_mut, SinkExt};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -30,9 +31,8 @@ use tokio::{
     time::{timeout_at, Instant},
 };
 use tokio_postgres::{
-    binary_copy::BinaryCopyInWriter,
     error::SqlState,
-    types::{ToSql, Type, WrongType},
+    types::{Type, WrongType},
     CopyInSink, GenericClient, NoTls,
 };
 
@@ -62,10 +62,12 @@ impl PostgresSender {
 
         let type_converter = {
             let statistic_set_type = get_or_create_statistic_set_type(&mut connector).await?;
-            let histogram_type = get_or_create_histogram_type(&mut connector).await?;
+            let histogram_types = get_or_create_histogram_type(&mut connector).await?;
+
             TypeConverter {
                 statistic_set_type,
-                histogram_type,
+                histogram_type: histogram_types.histogram_type,
+                tdigest_type: histogram_types.tdigest_type,
             }
         };
 
@@ -179,12 +181,11 @@ impl PostgresSender {
         let dimension_types = type_converter.get_dimension_type_map(datums);
         let measurement_types = type_converter.get_measurement_type_map(datums);
 
-        let all_column_types = get_all_column_types(&dimension_types, &measurement_types);
         let all_column_names = get_all_column_names(&dimension_types, &measurement_types);
 
         let sink: CopyInSink<bytes::Bytes> = match client
-            .copy_in::<String, bytes::Bytes>(&format!(
-                "copy {table_name} ({all_columns}) from stdin with binary",
+            .copy_in(&format!(
+                "copy {table_name} ({all_columns}) from stdin with (format csv, header false)", // with binary",
                 table_name = clean_id(metric),
                 all_columns = all_column_names.join(","),
             ))
@@ -245,8 +246,7 @@ impl PostgresSender {
             },
         };
 
-        let writer = BinaryCopyInWriter::new(sink, &all_column_types);
-        rows += write_and_close(writer, &dimension_types, &measurement_types, datums).await?;
+        rows += write_and_close(sink, &dimension_types, &measurement_types, datums).await?;
 
         Ok(rows)
     }
@@ -316,78 +316,105 @@ impl PostgresSender {
 
                 Ok(true)
             }
-            SinkError::DescribedError(_e) => todo!(),
-            SinkError::StringError(_) => todo!(),
+            SinkError::DescribedError(e) => {
+                log::error!("error while sending metrics, dropping: {e:?}");
+                Ok(false)
+            }
+            SinkError::StringError(e) => {
+                log::error!("error while sending metrics, dropping: {e:?}");
+                Ok(false)
+            }
+            SinkError::OtherError(e) => {
+                log::error!("error while sending metrics, dropping: {e:?}");
+                Ok(false)
+            }
         };
     }
 }
 
 async fn write_and_close(
-    writer: BinaryCopyInWriter,
+    sink: CopyInSink<bytes::Bytes>,
     dimensions: &BTreeMap<String, Type>,
     measurements: &BTreeMap<String, Type>,
     data: &[Datum],
 ) -> Result<usize, SinkError> {
-    pin_mut!(writer);
+    pin_mut!(sink);
     log::debug!("writing {} rows", data.len());
 
-    let mut row: Vec<Box<(dyn ToSql + Sync)>> = Vec::new();
+    let mut writer = csv::WriterBuilder::new()
+        .buffer_capacity(4 * (1 << 10))
+        .has_headers(false)
+        .from_writer(Vec::with_capacity(4 * (1 << 10)));
+
     for datum in data {
-        row.clear();
-        let datum_time = SystemTime::UNIX_EPOCH + Duration::from_nanos(datum.unix_nanos);
-        row.push(Box::new(datum_time));
+        let datum_time = humantime::format_rfc3339(
+            SystemTime::UNIX_EPOCH + Duration::from_nanos(datum.unix_nanos),
+        )
+        .to_string();
+        writer
+            .write_field(datum_time)
+            .map_err(|e| SinkError::other("failed writing time in csv", Box::new(e)))?;
+        log::debug!("writing datum: {datum:?}");
         for dimension_name in dimensions.keys() {
             if !datum.dimensions.contains_key(dimension_name) {
                 log::warn!("skipping dimension: {}", dimension_name);
-                row.push(Box::new(Option::<String>::None));
+                writer.write_field(b"").map_err(|e| {
+                    SinkError::other("failed writing nonexistent dimension in csv", Box::new(e))
+                })?;
                 continue;
             }
 
             let dimension = &datum.dimensions[dimension_name];
             if let Some(value) = dimension.value.as_ref() {
-                row.push(match value {
-                    dimension::Value::String(s) => Box::new(s),
-                    dimension::Value::Number(n) => Box::new(*n as i64),
-                    dimension::Value::Boolean(b) => Box::new(b),
-                })
+                match value {
+                    dimension::Value::String(s) => writer.write_field(s),
+                    dimension::Value::Number(n) => writer.write_field(n.to_string()),
+                    dimension::Value::Boolean(b) => writer.write_field(b.to_string()),
+                }
             } else {
-                row.push(Box::new(Option::<String>::None))
+                writer.write_field(b"")
             }
+            .map_err(|e| SinkError::other("failed writing dimension in csv", Box::new(e)))?
         }
         for measurement_name in measurements.keys() {
-            let measurement = &datum.measurements[measurement_name];
-            if let Some(value) = measurement.value.as_ref() {
-                row.push(match value {
-                    measurement::Value::I64(i) => Box::new(i),
-                    measurement::Value::I32(i) => Box::new(i),
-                    measurement::Value::F64(f) => Box::new(f),
-                    measurement::Value::F32(f) => Box::new(f),
-                    measurement::Value::StatisticSet(s) => {
-                        Box::<SqlStatisticSet>::new(s.clone().into())
+            let measurement = datum.measurements.get(measurement_name);
+            if let Some(m) = measurement {
+                if let Some(value) = &m.value {
+                    match value {
+                        measurement::Value::I64(i) => writer.write_field(i.to_string()),
+                        measurement::Value::I32(i) => writer.write_field(i.to_string()),
+                        measurement::Value::F64(f) => writer.write_field(f.to_string()),
+                        measurement::Value::F32(f) => writer.write_field(f.to_string()),
+                        measurement::Value::StatisticSet(s) => {
+                            let a: SqlStatisticSet = s.clone().into();
+                            writer.write_field(a.to_string())
+                        }
+                        measurement::Value::Histogram(h) => {
+                            writer.write_field(h.to_stupidmap().to_string())
+                        }
+                        measurement::Value::Tdigest(t) => {
+                            writer.write_field(SqlTdigest::from(t).to_string())
+                        }
                     }
-                    measurement::Value::Histogram(h) => Box::new(h.to_stupidmap()),
-                })
+                } else {
+                    writer.write_field(b"")
+                }
             } else {
-                row.push(Box::new(Option::<f64>::None))
+                writer.write_field(b"")
             }
+            .map_err(|e| SinkError::other("failed writing measurement in csv", Box::new(e)))?;
         }
-
-        let vec_of_raw_refs = row.iter().map(|c| c.as_ref()).collect_vec();
-        writer.as_mut().write(&vec_of_raw_refs).await?;
+        writer
+            // write the end of the csv record: a \n
+            .write_record(None::<&[u8]>)
+            .map_err(|e| SinkError::other("failed writing end record in csv", Box::new(e)))?;
     }
-    writer.finish().await?;
+    let buffer = writer
+        .into_inner()
+        .map_err(|e| SinkError::other("failed fetching csv buffer", Box::new(e)))?;
+    sink.send(bytes::Bytes::from(buffer)).await?;
+    sink.finish().await?;
     Ok(data.len())
-}
-
-// time, dimensions[], measurements[]
-fn get_all_column_types(
-    dimension_types: &BTreeMap<String, Type>,
-    measurement_types: &BTreeMap<String, Type>,
-) -> Vec<Type> {
-    let mut all_column_types: Vec<Type> = vec![Type::TIMESTAMPTZ];
-    all_column_types.extend(dimension_types.values().cloned());
-    all_column_types.extend(measurement_types.values().cloned());
-    all_column_types
 }
 
 // time, dimensions[], measurements[]
@@ -421,6 +448,7 @@ fn sql_data_type_string(measurement: &Measurement) -> &'static str {
         measurement::Value::F32(_) => "float4",
         measurement::Value::StatisticSet(_) => "statistic_set",
         measurement::Value::Histogram(_) => "histogram",
+        measurement::Value::Tdigest(_) => "tdigest",
     }
 }
 

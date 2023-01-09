@@ -10,9 +10,9 @@ use super::postgres_connector::PostgresConnector;
 
 pub async fn get_or_create_histogram_type(
     connector: &mut PostgresConnector,
-) -> Result<Type, SinkError> {
+) -> Result<SpecialTypes, SinkError> {
     let connection = connector.use_connection().await?;
-    match get_histogram_type(connection.client()).await {
+    match get_special_types(connection.client()).await {
         Ok(def) => Ok(def),
         Err(e) => {
             if let Some(dbe) = e.as_db_error() {
@@ -42,12 +42,21 @@ pub async fn get_or_create_histogram_type(
     }
 }
 
-async fn get_histogram_type(client: &Client) -> Result<Type, tokio_postgres::Error> {
-    match client.prepare("SELECT $1::histogram").await {
+pub struct SpecialTypes {
+    pub histogram_type: Type,
+    pub tdigest_type: Type,
+}
+
+async fn get_special_types(client: &Client) -> Result<SpecialTypes, tokio_postgres::Error> {
+    match client.prepare("SELECT $1::histogram, $2::tdigest").await {
         Ok(statement) => {
             let histogram_type = statement.params()[0].clone();
+            let tdigest_type = statement.params()[1].clone();
 
-            Ok(histogram_type)
+            Ok(SpecialTypes {
+                histogram_type,
+                tdigest_type,
+            })
         }
         Err(e) => Err(e),
     }
@@ -64,7 +73,7 @@ impl Histogram {
     }
 }
 
-async fn create_histogram_type(client: &Client) -> Result<Type, tokio_postgres::Error> {
+async fn create_histogram_type(client: &Client) -> Result<SpecialTypes, tokio_postgres::Error> {
     match client.batch_execute(r#"
 -- Data type alias for readability
 create domain histogram as jsonb;
@@ -162,7 +171,7 @@ AS $$
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
     "#).await {
         Ok(_modified) => {
-            Ok(get_histogram_type(client).await?)
+            Ok(get_special_types(client).await?)
         }
         Err(e) => Err(e)
     }

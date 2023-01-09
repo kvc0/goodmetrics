@@ -1,12 +1,12 @@
 # <img src="https://user-images.githubusercontent.com/3454741/151748581-1ad6c34c-f583-4813-b878-d19c98ec3427.png" width="108em" align="center"/> Goodmetrics
 
-The worst metrics format - except for all the others
+Light, fast, unlimited cardinality, service operations-focused time series metrics.
 
 # Overview
 ## About
 Goodmetrics is for monitoring web service workflows: It records __observations from workflows__ not __contextless numbers__.
 
-Leveraging [Postgresql and the Timescaledb plugin](https://docs.timescale.com/), Goodmetrics creates a simple, familiar wide schema for your application workflow; a column per dimension and a column per measurement. Cardinality is not an issue for a modern (read: 25+ year old) time series database.
+Leveraging [Postgresql and the Timescaledb plugin](https://docs.timescale.com/), Goodmetrics creates a simple, familiar wide schema for your application workflow; a column per dimension and a column per measurement. Cardinality is not an issue for a modern (read: 25+ year old) database.
 
 ## Getting started
 ### **Have a TimescaleDB**
@@ -17,6 +17,7 @@ Leveraging [Postgresql and the Timescaledb plugin](https://docs.timescale.com/),
 create database metrics;
 \c metrics
 create extension timescaledb;
+create extension timescaledb_toolkit;
 create role metrics_write;
 grant create on database metrics to metrics_write;
 create user metrics in group metrics_write;
@@ -55,7 +56,8 @@ goodmetrics send '
     "a_float_measurement":{"value":{"F32":42.42}},
     "a_double_measurement":{"value":{"F64":42.42}},
     "a_statistic_set":{"value":{"StatisticSet": {"minimum":1, "maximum":2, "samplesum":8, "samplecount":6}}},
-    "a_histogram":{"value":{"Histogram":{"buckets":{"1":2, "3":4, "5":6}}}}
+    "a_histogram":{"value":{"Histogram":{"buckets":{"1":2, "3":4, "5":6}}}},
+    "a_tdigest":{"value":{"Tdigest":{"sum":42.3,"count":42,"min":1,"max":1.3,"centroids":[{"mean":1,"weight":41},{"mean":1.3,"weight":1}]}}}
   }
 } ' '{
   "metric":"test_api",
@@ -71,7 +73,8 @@ goodmetrics send '
     "a_float_measurement":{"value":{"F32":42.42}},
     "a_double_measurement":{"value":{"F64":42.42}},
     "a_statistic_set":{"value":{"StatisticSet": {"minimum":1, "maximum":2, "samplesum":8, "samplecount":6}}},
-    "a_histogram":{"value":{"Histogram":{"buckets":{"1":2, "3":4, "5":6}}}}
+    "a_histogram":{"value":{"Histogram":{"buckets":{"1":2, "3":4, "5":6}}}},
+    "a_tdigest":{"value":{"Tdigest":{"sum":42.3,"count":42,"min":1,"max":1.3,"centroids":[{"mean":1,"weight":41},{"mean":1.3,"weight":1}]}}}
   }
 }'
 ```
@@ -150,7 +153,8 @@ goodmetrics send '{
     "a_float_measurement":{"value":{"F32":42.42}},
     "a_double_measurement":{"value":{"F64":42.42}},
     "a_statistic_set":{"value":{"StatisticSet": {"minimum":1, "maximum":2, "samplesum":8, "samplecount":6}}},
-    "a_histogram":{"value":{"Histogram":{"buckets":{"1":2, "3":4, "5":6}}}}
+    "a_histogram":{"value":{"Histogram":{"buckets":{"1":2, "3":4, "5":6}}}},
+    "a_tdigest":{"value":{"Tdigest":{"sum":42.3,"count":42,"min":1,"max":1.3,"centroids":[{"mean":1,"weight":41},{"mean":1.3,"weight":1}]}}}
   }
 }' '{
   "metric":"mm",
@@ -166,7 +170,8 @@ goodmetrics send '{
     "a_float_measurement":{"value":{"F32":42.42}},
     "a_double_measurement":{"value":{"F64":42.42}},
     "a_statistic_set":{"value":{"StatisticSet": {"minimum":1, "maximum":2, "samplesum":8, "samplecount":6}}},
-    "a_histogram":{"value":{"Histogram":{"buckets":{"1":2, "3":4, "5":6}}}}
+    "a_histogram":{"value":{"Histogram":{"buckets":{"1":2, "3":4, "5":6}}}},
+    "a_tdigest":{"value":{"Tdigest":{"sum":42.3,"count":42,"min":1,"max":1.3,"centroids":[{"mean":1,"weight":41},{"mean":1.3,"weight":1}]}}}
   }
 }'
 ```
