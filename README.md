@@ -1,6 +1,6 @@
 # <img src="https://user-images.githubusercontent.com/3454741/151748581-1ad6c34c-f583-4813-b878-d19c98ec3427.png" width="108em" align="center"/> Goodmetrics
 
-Light, fast, unlimited cardinality, service operations-focused time series metrics.
+Light, fast, unlimited cardinality, service-focused time series metrics.
 
 # Overview
 ## About
@@ -13,6 +13,7 @@ Leveraging [Postgresql and the Timescaledb plugin](https://docs.timescale.com/),
 * https://docs.timescale.com/install/latest/self-hosted/installation-debian/
 * Timescale Cloud
 
+### Set up timescaledb if you are self-hosting
 ```sql
 create database metrics;
 \c metrics
@@ -25,7 +26,7 @@ create user metrics in group metrics_write;
 
 create role metrics_read;
 grant pg_read_all_data to metrics_read;
-create user grafana;
+create user grafana in group metrics_read;
 \password grafana
 ```
 
@@ -81,13 +82,14 @@ goodmetrics send '
 
 ### Configurations
 **Upstreams**
-* Goodmetrics SDK's. If you're a service developer this is where to go.
-* Prometheus. If you're stuck with this okay.
+* Goodmetrics SDK's. If you're a service developer this is where to look.
+* Prometheus. If you're stuck with this then okay. You can use `goodmetrics` to adapt it.
 
 **Downstreams**
 * TimescaleDB. The good way; with simple, rich and easy to graph wide tables.
 * OpenTelemetry otlp. Strips your measurements' relationships to express them as otel types.
-  (this is for compatibility, it is not an ideal downstream)
+  This is for compatibility, it is not an ideal downstream. It does not support
+  t-digests though, unfortunately.
 
 ### On healing
 Goodmetrics self-heals **schema**, but thinks that **data** from _now_ is most important.
@@ -102,7 +104,7 @@ When there's a problem with goodmetrics data or connections, stuff gets dropped.
 
 | Goodmetrics type          | Timescale type | about  |
 | :-----:                   | :--:           | ---    |
-| `time`                    | timestamptz    | The 1 required column, used as the time column for hypertables. It is provided by Goodmetrics |
+| `time`                    | timestamptz    | The 1 required column, used as the time column for hypertables. It is provided by goodmetrics |
 | int_dimension             | int8/bigint    | A 64 bit integer |
 | str_dimension             | text           | A label |
 | bool_dimension            | boolean        | A flag |
@@ -110,8 +112,9 @@ When there's a problem with goodmetrics data or connections, stuff gets dropped.
 | i32                       | int4/int       | A 32 bit integer |
 | f64                       | float8         | A 64 bit floating point number |
 | f32                       | float4         | A 32 bit floating point number |
-| statistic_set_measurement | statistic_set  | A preaggregated {min,max,sum,count} rollup of some value. Has convenience functions for graphing and rollups. |
-| histogram_measurement     | histogram      | Implemented as jsonb. Has convenience functions for graphing and rollups. |
+| statistic_set             | statistic_set  | A preaggregated {min,max,sum,count} rollup of some value. Has convenience functions for graphing and rollups. |
+| histogram                 | histogram      | Implemented as jsonb. Has convenience functions for graphing and rollups. |
+| t_digest                  | tdigest        | [Fancy](https://github.com/tdunning/t-digest/blob/main/docs/t-digest-paper/histo.pdf) space-constrained and high-speed histogram sketch. Uses timescaledb_toolkit functions for graphing. |
 
 ## OpenTelemetry (the not-so-good way)
 
@@ -208,7 +211,7 @@ ARGS:
 | counter                  | f64               | All counters are treated as f64 |
 | gauge                    | f64               | Gauges are just f64 |
 | untyped                  | f64               | We just treat untyped like gauge |
-| histogram                | histogram         | These are translated to sparse good histograms from the bonkers prometheus histograms |
+| histogram                | histogram         | These are translated to sparse histograms from the bonkers prometheus histograms |
 | summary                  | f64               | Treated like gauges. These are awful and you should never use them if you can possibly use histograms instead |
 
 Example grafana query:
@@ -238,50 +241,37 @@ Runs linters on commit to help you check in code that passes PR checks.
 ln -s ../../git_hooks/pre-commit .git/hooks/pre-commit
 ```
 
-# Philosophy
+# Cardinality
+When writing a real application for real users, you often have other dimensions that are variously diagnostic, speculative, informative or accidental (!!). Goodmetrics supports as many dimension positions as you have space for in your database.
 
-Not perfect, but it's good.
+Databases like Influx often find themselves irreparably polluted by a programming mistake which tagged data with an unintentional value (ask me how i know :-(). Others like CloudWatch, TimeStream, Prometheus, Datadog and Lightstep all charge, whether in RAM or $$, per-dimension combination.
 
-## Good?
-The data model is not bad, like combinatorial metrics engines (think
-Prometheus, Cloudwatch, Influx).
+Consider 50 servers, 30 apis (or web pages), 80k users, a geo location (let's say 15/user), a logged-in/anonymous bit, and 12 measurements per api. In naive systems, this is modeled as over **40 billion** distinct series unless you de-relate your data. Go ahead and check the cost of that cardinality in CloudWatch! You'll have a rough time with any time series storage engine that stores series the tag-set way. You won't even be able to make reasonable use of it due to the amount of time the tag queries take! If you use TimeStream you'll run out of money in the pursuit of rich service metrics.
 
-It's not perfect, like expensive trace recordings.
+Instead, if you model these interactions as Goodmetrics, you'll model 1 bag of measurements and dimensions per api/web page load. You configure optional pre-aggregation of the data if you've got some high frequency stuff to record. You don't have to but it's an option if you don't want a massive database. As long as you have enough disk space you can store the cardinality you need.
 
-It's just good, between these extremes of naivety and high cost.
+Also, with goodmetrics and Timescale your data remains related. You can pivot your measurements by any dimension or value threshold, because you are just using PostgresQL. It might sound sexy to reinvent time series data storage, but for service monitoring... **"boring" is a feature.**
 
-## Naive huh?
-Naive counters, gauges and histograms are fine when you have data that has few dimensions, or when the primary relationship the data has is intrinsically to time.
-
-When writing a real application for real users, however, you often have other dimensions that are variously diagnostic, speculative, informative or accidental (!!). Databases like Influx often find themselves irreparably polluted by a programming mistake which tagged data with an unintentional value (ask me how i know :-().
-
-Consider 50 servers, 30 apis (or web pages), 80k users, a geo location (let's say 15/user), a logged-in/anonymous bit, and 12 measurements per api. In naive systems, this is modeled as over **40 billion** distinct series unless you de-relate your data. Go ahead and check the cost of that cardinality in cloudwatch! You'll have a rough time with any time series storage engine that stores series the tag-set way. You won't even be able to make reasonable use of it due to the amount of time the tag queries take! If you use TimeStream you'll run out of money over rich service metrics. Do the math on their pricing worksheet and see.
-
-Instead, if you model these interactions as Goodmetrics, you'll have 1 bag of measurements and dimensions per api/web page load. You can also pre-aggregate the data if you've got some high frequency stuff to record. You don't have to but it's an option if you don't want a massive database. As long as you have enough disk space you can store the cardinality you need.
-
-Not only that, your data remains related. You can pivot your measurements by any dimension or value threshold, because you are standing on the shoulders of decades of great minds investing in PostgresQL. It might sound sexy to reinvent time series data storage, but for service monitoring... "boring" is a feature.
-
-## Not perfect huh?
+## What about traces?
 You could make every single stack in your application a unit of work and emit a distinct row for it, with invocation IDs so you could join all of the stacks and view detailed traces. Doing that for every request on a responsive web application, or on a web application with a high rate of requests puts obvious pressure on your downstream storage. Some services, like Lightstep, have elaborate means to collect torrents of traces and sift through them for the interesting ones.
 
 These systems are awesome. They require significant processor and network resources from your application to construct, track, serialize and emit details about every API invocation from your system. If you can afford this whether because your rate is low or your budget is immense, it's a very powerful way to observe a system.
 
-Goodmetrics units of work are more like a trace with only 1 level - and no intermediate filter server. Goodmetrics can be pre-aggregated on the reporting server as well, to keep row rate very low and dashboards maximally responsive.
+Goodmetrics units of work are more like a trace with only 1 level. Goodmetrics can be pre-aggregated on the reporting server as well, to keep row rate low and dashboards responsive.
 
 ## A white-box unit of work
 What a "unit of work" or "workflow" is depends wholly on your application. Some examples:
 
 ### A web server
-* One unit of work would be an individual invocation of the GET() handler.
+* The `/user/{}` GET handler.
   Add your user or header dimensions at the start of the handler and record
   the things you want where they happen. A Metrics object is a cheap blob
   that accumulates all the observations from a workflow's execution.
-* Another would be a background job that runs on a timer to refresh a cache
-  or do some database tracing.
+* A background job that runs on a timer to refresh a cache or do some database tracing.
 
 ### A database
-* One transaction is a unit of work. It may span several statements.
-* One statement is a unit of work.
+* One transaction. It may span several statements.
+* One statement.
 * One execution of a background job (like vacuum).
 
 ### A microcontroller
