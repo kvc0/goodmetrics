@@ -38,7 +38,7 @@ jobs:
       - name: Build
         run: |
           ./install_protoc_osx.sh
-          cargo build --release
+          cargo build
   # musl:
   #   name: musl
   #   runs-on: ubuntu-20.04
@@ -62,4 +62,4 @@ jobs:
       - name: build
         run: |
           ./install_protoc.sh
-          cargo build --release
+          cargo build

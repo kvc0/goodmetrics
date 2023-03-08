@@ -14,24 +14,24 @@ path = "src/bin/server.rs"
 
 
 [dependencies]
-tokio = { version = "1.23", features = ["full", "tracing"] }
-tokio-stream = { version = "0.1.11", features = ["net"]}
+tokio = { version = "1.26", features = ["full", "tracing"] }
+tokio-stream = { version = "0.1", features = ["net"]}
 console-subscriber = { version = "0.1.8" }
 
-hyper = { version = "0.14.23", features = ["full"] }
-tonic = { version = "0.8.3", features = ["tls"]} # , "compression" broken by console-subscriber=0.1.6
+hyper = { version = "0.14", features = ["full"] }
+tonic = { version = "0.8", features = ["tls"]} # , "compression" broken by console-subscriber=0.1.6
 tonic-reflection = { version = "0.6.0" }
-tower = { version = "0.4.13" }
-webpki = { version = "0.22.0" }
-rustls-native-certs = { version = "0.6.2" }
-tokio-rustls = { version = "0.23.4", features = ["dangerous_configuration"] }
-hyper-rustls = { version = "0.23.2", features = ["http2"] }
-rustls-pemfile = "1.0.1"
-tower-http = { version = "0.3.5", features = ["add-extension", "util"] }
+tower = { version = "0.4" }
+webpki = { version = "0.22" }
+rustls-native-certs = { version = "0.6" }
+tokio-rustls = { version = "0.23", features = ["dangerous_configuration"] }
+hyper-rustls = { version = "0.23", features = ["http2"] }
+rustls-pemfile = "1.0"
+tower-http = { version = "0.4", features = ["add-extension", "util"] }
 
-prost = { version = "0.11.3"}
-socket2 = { version = "0.4.7", features = ["all"]}
-num_cpus = { version = "1.14.0"}
+prost = { version = "0.11"}
+socket2 = { version = "0.5", features = ["all"]}
+num_cpus = { version = "1.15"}
 
 tokio-postgres = { version = "0.7.7", features = ["with-serde_json-1"]}
 postgres-types = { version = "0.2.4", features = ["derive"] }
@@ -50,19 +50,26 @@ reqwest = { version = "0.11.13", default-features = false, features = [] }
 object-pool = { version = "0.5" }
 humantime = { version = "2.1" }
 
-clap = {version = "4.0.29", features = ["derive"]}
-# structopt-toml = {version = "0.5.0"}
+clap = {version = "4.1", features = ["derive"]}
 dirs = {version = "4.0.0"}
 lazy_static = {version = "1.4.0"}
 
 env_logger = { version = "0.10.0" }
 log = { version = "0.4.17" }
-anyhow = { version = "1.0.68" }
+anyhow = { version = "1.0" }
 
 itertools = { version = "0.10.5" }
-regex = { version = "1.7.0" }
-thiserror = { version = "1.0.38" }
-futures = { version = "0.3.25" }
+regex = { version = "1.7" }
+thiserror = { version = "1.0" }
+futures = { version = "0.3" }
 
 [build-dependencies]
 tonic-build = {version = "0.8.4", features = []}
+
+[package.metadata.cross.target.aarch64-unknown-linux-gnu]
+pre-build = [ "apt-get install -y unzip", "curl -L https://github.com/protocolbuffers/protobuf/releases/download/v21.9/protoc-21.9-linux-x86_64.zip -o protoc.zip", "unzip -o protoc.zip -d protoc", "mv protoc/bin/* /usr/local/bin/", "mv protoc/include/* /usr/local/include/",]
+zig = "2.26"
+
+[package.metadata.cross.target.x86_64-unknown-linux-gnu]
+pre-build = [ "apt-get install -y unzip", "curl -L https://github.com/protocolbuffers/protobuf/releases/download/v21.9/protoc-21.9-linux-x86_64.zip -o protoc.zip", "unzip -o protoc.zip -d protoc", "mv protoc/bin/* /usr/local/bin/", "mv protoc/include/* /usr/local/include/",]
+zig = "2.26"
