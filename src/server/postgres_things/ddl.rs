@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use lazy_static::lazy_static;
 use regex::Regex;
 use tokio_postgres::Client;
@@ -25,14 +27,17 @@ pub async fn add_column(
 pub async fn create_table(
     transaction: &Client,
     table_name: &str,
+    retention: &Duration,
 ) -> Result<(), tokio_postgres::Error> {
     transaction.batch_execute(
     &format!(
-            r#"create table {table} (time timestamptz);
-            select * from create_hypertable('{table}', 'time', chunk_time_interval => interval '{chunk}' );
+            r#"CREATE TABLE {table} (time timestamptz);
+            SELECT * from create_hypertable('{table}', 'time', chunk_time_interval => interval '{chunk}' );
+            SELECT add_retention_policy('{table}', INTERVAL '{retention_seconds} seconds');
             "#,
             table=table_name,
-            chunk="4h"
+            chunk="4h",
+            retention_seconds=retention.as_secs(),
         )
     ).await
 }

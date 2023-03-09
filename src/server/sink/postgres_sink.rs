@@ -6,6 +6,7 @@ use std::{
 };
 
 use crate::server::{
+    config::options::Options,
     postgres_things::{
         ddl::{self, clean_id},
         histogram::get_or_create_histogram_type,
@@ -44,16 +45,23 @@ lazy_static! {
     static ref UNDEFINED_TABLE: Regex = Regex::new(r#"relation "(?P<table>.+)" does not exist"#).unwrap();
 }
 
+#[derive(Debug, Clone)]
+struct PostgresConfig {
+    pub default_retention: Duration,
+}
+
 pub struct PostgresSender {
     connector: PostgresConnector,
     rx: MetricsReceiveQueue,
     type_converter: TypeConverter,
+    configuration: PostgresConfig,
 }
 
 impl PostgresSender {
     pub async fn new_connection(
         connection_string: &str,
         rx: MetricsReceiveQueue,
+        options: Options,
     ) -> Result<PostgresSender, SinkError> {
         log::debug!("new_connection: {:?}", connection_string);
         let max_conns = 16;
@@ -75,6 +83,9 @@ impl PostgresSender {
             connector,
             rx,
             type_converter,
+            configuration: PostgresConfig {
+                default_retention: options.default_retention,
+            },
         })
     }
 
@@ -97,6 +108,7 @@ impl PostgresSender {
 
             let batch_connector = connector.clone();
             let batch_type_converter = type_converter.clone();
+            let batch_configuration = self.configuration.clone();
             batch_tasks
                 .run_until(async move {
                     let batchlen = batch.len();
@@ -110,6 +122,7 @@ impl PostgresSender {
 
                     for (metric, datums) in grouped_metrics.into_iter() {
                         task::spawn_local(PostgresSender::send_some(
+                            batch_configuration.clone(),
                             batch_connector.clone(),
                             batch_type_converter.clone(),
                             metric,
@@ -126,6 +139,7 @@ impl PostgresSender {
     }
 
     async fn send_some(
+        configuration: PostgresConfig,
         connector: Rc<PostgresConnector>,
         type_converter: Rc<TypeConverter>,
         metric: String,
@@ -155,7 +169,12 @@ impl PostgresSender {
                     Err(e) => {
                         drop(connection);
                         let connection = connector.use_connection().await?;
-                        match PostgresSender::handle_error_and_should_it_retry(&connection, e).await
+                        match PostgresSender::handle_error_and_should_it_retry(
+                            &configuration,
+                            &connection,
+                            e,
+                        )
+                        .await
                         {
                             Ok(should_retry) => should_retry,
                             Err(retry_failure) => {
@@ -252,6 +271,7 @@ impl PostgresSender {
     }
 
     async fn handle_error_and_should_it_retry(
+        configuration: &PostgresConfig,
         connection: &PooledConnection<'_, PostgresConnectionManager<NoTls>>,
         e: SinkError,
     ) -> Result<bool, SinkError> {
@@ -312,7 +332,12 @@ impl PostgresSender {
             }
             SinkError::MissingTable(what_table) => {
                 log::info!("adding missing table {:?}", what_table);
-                ddl::create_table(connection.client(), &what_table.table).await?;
+                ddl::create_table(
+                    connection.client(),
+                    &what_table.table,
+                    &configuration.default_retention,
+                )
+                .await?;
 
                 Ok(true)
             }

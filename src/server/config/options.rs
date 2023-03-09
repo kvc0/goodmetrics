@@ -1,8 +1,18 @@
+use std::time::Duration;
+
 use clap::Parser;
 use serde_derive::Deserialize;
 
-#[derive(Debug, Deserialize, Parser)]
-#[clap(author = "Kenny")]
+#[derive(Debug, Deserialize, Parser, Clone)]
+#[clap(
+    author = "Kenny",
+    group(
+        clap::ArgGroup::new("remote")
+            .required(true)
+            .multiple(true)
+            .args(["connection_string", "otlp_remote"]),
+    )
+)]
 pub struct Options {
     // #[arg(long, help = "A config file")]
     // pub config: Option<String>,
@@ -51,6 +61,15 @@ pub struct Options {
         env = "API_KEYS"
     )]
     pub api_keys: Vec<String>,
+
+    #[arg(
+        long,
+        help = "Example: 7d",
+        default_value = "7d",
+        env = "TIMESCALE_DEFAULT_RETENTION",
+        value_parser = humantime::parse_duration,
+    )]
+    pub default_retention: Duration,
 
     #[arg(
         long,

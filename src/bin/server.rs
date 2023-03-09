@@ -1,5 +1,5 @@
 use goodmetrics::proto::goodmetrics::metrics_server::MetricsServer;
-use goodmetrics::server::config::options::get_args;
+use goodmetrics::server::config::options::{get_args, Options};
 use goodmetrics::server::servers::goodmetrics::GoodMetricsServer;
 use goodmetrics::server::sink::{
     metricssendqueue::{MetricsReceiveQueue, MetricsSendQueue},
@@ -10,11 +10,11 @@ use goodmetrics::server::sink::{
 use tonic::transport::{Identity, Server, ServerTlsConfig};
 
 use std::collections::HashSet;
-use std::{cmp::min, net::SocketAddr, sync::Arc};
+use std::{cmp::min, net::SocketAddr};
 use tokio::net::TcpListener;
 
 async fn serve(
-    args: Arc<goodmetrics::server::config::options::Options>,
+    args: goodmetrics::server::config::options::Options,
     send_queue: MetricsSendQueue,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let address: std::net::SocketAddr = args.listen_socket_address.parse().unwrap();
@@ -139,7 +139,7 @@ fn main() {
 
 async fn run_server(args: goodmetrics::server::config::options::Options) {
     let mut handlers = Vec::new();
-    let args_shared = Arc::from(args);
+    let args_shared = args;
     let (send_queue, receive_queue) = MetricsSendQueue::new();
 
     for i in 0..min(args_shared.max_threads, num_cpus::get()) {
@@ -165,13 +165,18 @@ async fn run_server(args: goodmetrics::server::config::options::Options) {
 
     if let Some(connection_string_arg) = &args_shared.connection_string {
         let connection_string = connection_string_arg.clone();
+        let threadlocal_args = args_shared.clone();
         let bg_handle = std::thread::spawn(move || {
             // Consume stuff on a background task
             tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
                 .unwrap()
-                .block_on(consume_postgres(connection_string, receive_queue))
+                .block_on(consume_postgres(
+                    connection_string,
+                    receive_queue,
+                    threadlocal_args,
+                ))
                 .unwrap();
         });
         handlers.push(bg_handle);
@@ -203,14 +208,16 @@ async fn run_server(args: goodmetrics::server::config::options::Options) {
 async fn consume_postgres(
     connection_string: String,
     receive_queue: MetricsReceiveQueue,
+    options: Options,
 ) -> Result<(), SinkError> {
-    let sender = match PostgresSender::new_connection(&connection_string, receive_queue).await {
-        Ok(sender) => sender,
-        Err(e) => {
-            log::error!("failed to start postgres sender: {:?}", e);
-            std::process::exit(3)
-        }
-    };
+    let sender =
+        match PostgresSender::new_connection(&connection_string, receive_queue, options).await {
+            Ok(sender) => sender,
+            Err(e) => {
+                log::error!("failed to start postgres sender: {:?}", e);
+                std::process::exit(3)
+            }
+        };
     sender.consume_stuff().await?;
     Ok(())
 }
