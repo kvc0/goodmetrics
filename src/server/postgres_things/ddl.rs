@@ -28,15 +28,26 @@ pub async fn create_table(
     transaction: &Client,
     table_name: &str,
     retention: &Duration,
+    compress: bool,
 ) -> Result<(), tokio_postgres::Error> {
+    let chunk = "4h";
+    let compression_statement = if compress {
+        format!(
+            r#"
+            ALTER TABLE {table_name} SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC', timescaledb.compress_chunk_time_interval = '24 hours');
+            SELECT add_compression_policy('{table_name}', INTERVAL '{chunk}');
+            "#
+        )
+    } else {
+        "".to_string()
+    };
     transaction.batch_execute(
     &format!(
-            r#"CREATE TABLE {table} (time timestamptz);
-            SELECT * from create_hypertable('{table}', 'time', chunk_time_interval => interval '{chunk}' );
-            SELECT add_retention_policy('{table}', INTERVAL '{retention_seconds} seconds');
+            r#"CREATE TABLE {table_name} (time timestamptz);
+            SELECT * from create_hypertable('{table_name}', 'time', chunk_time_interval => INTERVAL '{chunk}' );
+            SELECT add_retention_policy('{table_name}', INTERVAL '{retention_seconds} seconds');
+            {compression_statement}
             "#,
-            table=table_name,
-            chunk="4h",
             retention_seconds=retention.as_secs(),
         )
     ).await

@@ -48,6 +48,7 @@ lazy_static! {
 #[derive(Debug, Clone)]
 struct PostgresConfig {
     pub default_retention: Duration,
+    pub compress_new_tables: bool,
 }
 
 pub struct PostgresSender {
@@ -85,6 +86,7 @@ impl PostgresSender {
             type_converter,
             configuration: PostgresConfig {
                 default_retention: options.default_retention,
+                compress_new_tables: options.compress_new_tables,
             },
         })
     }
@@ -336,6 +338,7 @@ impl PostgresSender {
                     connection.client(),
                     &what_table.table,
                     &configuration.default_retention,
+                    configuration.compress_new_tables,
                 )
                 .await?;
 

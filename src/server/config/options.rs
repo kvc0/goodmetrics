@@ -73,6 +73,14 @@ pub struct Options {
 
     #[arg(
         long,
+        help = "Create a compression policy for all new metrics tables. This rolls your finer-grained chunks up into 24 hour compressed chunks.",
+        default_value = "true",
+        env = "TIMESCALE_COMPRESS_NEW_TABLES"
+    )]
+    pub compress_new_tables: bool,
+
+    #[arg(
+        long,
         help = "Example: host=localhost port=2345 user=metrics password=metrics connect_timeout=10",
         env = "TIMESCALE_CONNECTION_STRING"
     )]
