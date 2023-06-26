@@ -4,13 +4,14 @@ Light, fast, unlimited cardinality, service-focused time series metrics.
 
 # Overview
 ## About
-Goodmetrics is for monitoring web service workflows: It records __observations from workflows__ not __contextless numbers__.
+Goodmetrics is for monitoring web service workflows: It records __contextual observations from workflows__ rather than the __contextless numbers__ of other collection systems. (Think "single-level trace" and you're close)
 
-Leveraging [Postgresql and the Timescaledb plugin](https://docs.timescale.com/), Goodmetrics creates a simple, familiar wide schema for your application workflow; a column per dimension and a column per measurement. Cardinality is not an issue for a modern (read: 25+ year old) database.
+Leveraging [Postgresql and the Timescaledb plugin](https://docs.timescale.com/), Goodmetrics creates a simple, familiar wide schema for your application workflow; a column per dimension and a column per measurement.
 
 ## Getting started
-### **Have a TimescaleDB**
+### **TimescaleDB**
 * https://docs.timescale.com/install/latest/self-hosted/installation-debian/
+* Timescale docker
 * Timescale Cloud
 
 ### Set up timescaledb if you are self-hosting
@@ -83,24 +84,24 @@ goodmetrics send '
 ### Configurations
 **Upstreams**
 * Goodmetrics SDK's. If you're a service developer this is where to look.
+* `goodmetrics` cli. If you're scripting some bach this might be your ticket.
 * Prometheus. If you're stuck with this then okay. You can use `goodmetrics` to adapt it.
 
 **Downstreams**
 * TimescaleDB. The good way; with simple, rich and easy to graph wide tables.
 * OpenTelemetry otlp. Strips your measurements' relationships to express them as otel types.
-  This is for compatibility, it is not an ideal downstream. It does not support
-  t-digests though, unfortunately.
+  This is for compatibility. Most otlp metrics stores will struggle with Goodmetrics cardinality.
 
 ### On healing
-Goodmetrics self-heals **schema**, but thinks that **data** from _now_ is most important.
+Goodmetrics self-heals schema, and thinks that data from now is most important.
 
-When you have bad data or if someone messes stuff up or whatever - just `drop table problematic_table cascade` and you're good. If you change a column's data type (illegal) and you didn't change the name, just `alter table problematic_table drop column problematic_column`. It will recreate with the currently-reported type. Failures to self-heal from missing data are bugs; please report them!
+When you have bad data, `drop table problematic_table cascade` and you're good. If you change a column's data type (illegal) and you didn't change the name, just `alter table problematic_table drop column problematic_column`. It will recreate that column with the currently-reported type.
 
-When there's a problem with goodmetrics data or connections, stuff gets dropped. Goodmetrics doesn't queue for very long, instead favoring the data from now over the data from some time ago. While it might be useful to have that data, goodmetrics thinks it's more valuable to know for sure that your service is healthy!
+When there's a problem with data or connections, data gets dropped. Goodmetrics doesn't queue for very long, favoring your service's time to recovery and the _now_ over the nice-to-have of data from time gone by.
 
 # Data model
 
-## TimescaleDB Direct (the good way)
+## TimescaleDB Direct
 
 | Goodmetrics type          | Timescale type | about  |
 | :-----:                   | :--:           | ---    |
@@ -114,9 +115,9 @@ When there's a problem with goodmetrics data or connections, stuff gets dropped.
 | f32                       | float4         | A 32 bit floating point number |
 | statistic_set             | statistic_set  | A preaggregated {min,max,sum,count} rollup of some value. Has convenience functions for graphing and rollups. |
 | histogram                 | histogram      | Implemented as jsonb. Has convenience functions for graphing and rollups. |
-| t_digest                  | tdigest        | [Fancy](https://github.com/tdunning/t-digest/blob/main/docs/t-digest-paper/histo.pdf) space-constrained and high-speed histogram sketch. Uses timescaledb_toolkit functions for graphing. |
+| t_digest        **[beta]**    | tdigest        | [Fancy](https://github.com/tdunning/t-digest/blob/main/docs/t-digest-paper/histo.pdf) space-constrained and high-speed histogram sketch. Uses timescaledb_toolkit functions for graphing. |
 
-## OpenTelemetry (the not-so-good way)
+## OpenTelemetry (compatibility)
 
 | Goodmetrics type          | OpenTelemetry Metrics type | about  |
 | :-----:                   | :--:                       | ---    |
@@ -240,44 +241,3 @@ Runs linters on commit to help you check in code that passes PR checks.
 ```
 ln -s ../../git_hooks/pre-commit .git/hooks/pre-commit
 ```
-
-# Cardinality
-When writing a real application for real users, you often have other dimensions that are variously diagnostic, speculative, informative or accidental (!!). Goodmetrics supports as many dimension positions as you have space for in your database.
-
-Databases like Influx often find themselves irreparably polluted by a programming mistake which tagged data with an unintentional value (ask me how i know :-(). Others like CloudWatch, TimeStream, Prometheus, Datadog and Lightstep all charge, whether in RAM or $$, per-dimension combination.
-
-Consider 50 servers, 30 apis (or web pages), 80k users, a geo location (let's say 15/user), a logged-in/anonymous bit, and 12 measurements per api. In naive systems, this is modeled as over **40 billion** distinct series unless you de-relate your data. Go ahead and check the cost of that cardinality in CloudWatch! You'll have a rough time with any time series storage engine that stores series the tag-set way. You won't even be able to make reasonable use of it due to the amount of time the tag queries take! If you use TimeStream you'll run out of money in the pursuit of rich service metrics.
-
-Instead, if you model these interactions as Goodmetrics, you'll model 1 bag of measurements and dimensions per api/web page load. You configure optional pre-aggregation of the data if you've got some high frequency stuff to record. You don't have to but it's an option if you don't want a massive database. As long as you have enough disk space you can store the cardinality you need.
-
-Also, with goodmetrics and Timescale your data remains related. You can pivot your measurements by any dimension or value threshold, because you are just using PostgresQL. It might sound sexy to reinvent time series data storage, but for service monitoring... **"boring" is a feature.**
-
-## What about traces?
-You could make every single stack in your application a unit of work and emit a distinct row for it, with invocation IDs so you could join all of the stacks and view detailed traces. Doing that for every request on a responsive web application, or on a web application with a high rate of requests puts obvious pressure on your downstream storage. Some services, like Lightstep, have elaborate means to collect torrents of traces and sift through them for the interesting ones.
-
-These systems are awesome. They require significant processor and network resources from your application to construct, track, serialize and emit details about every API invocation from your system. If you can afford this whether because your rate is low or your budget is immense, it's a very powerful way to observe a system.
-
-Goodmetrics units of work are more like a trace with only 1 level. Goodmetrics can be pre-aggregated on the reporting server as well, to keep row rate low and dashboards responsive.
-
-## A white-box unit of work
-What a "unit of work" or "workflow" is depends wholly on your application. Some examples:
-
-### A web server
-* The `/user/{}` GET handler.
-  Add your user or header dimensions at the start of the handler and record
-  the things you want where they happen. A Metrics object is a cheap blob
-  that accumulates all the observations from a workflow's execution.
-* A background job that runs on a timer to refresh a cache or do some database tracing.
-
-### A database
-* One transaction. It may span several statements.
-* One statement.
-* One execution of a background job (like vacuum).
-
-### A microcontroller
-* One execution of your main loop() (if you're not using a modern async/await uc)
-* One execution of a callback for a user button press (obviously not in the ISR
-  but rather in the user-mode handler)
-* Periodic snapshot of environment measurements (free memory, processor 
-  temperature, etc.)
-* One sensor reading.
