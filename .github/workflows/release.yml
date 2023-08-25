@@ -25,24 +25,6 @@ env:
   cache: 0
 
 jobs:
-  rustfmt:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    - name: install rustfmt
-      run: rustup component add rustfmt
-    - name: rustfmt
-      run: cargo fmt -- --check
-  clippy:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    - name: install clippy
-      run: rustup component add clippy
-    - name: clippy
-      run: |
-        ./install_protoc.sh
-        cargo clippy --all-targets --all-features -- -D warnings
   macos:
     name: macos
     runs-on: macos-latest
@@ -120,8 +102,6 @@ jobs:
     needs:
       - ubuntu
       - macos
-      - rustfmt
-      - clippy
     steps:
       - uses: actions/checkout@v2
       - name: download clients
@@ -144,9 +124,6 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
-    needs:
-      - rustfmt
-      - clippy
     steps:
       -
         name: Set up QEMU
