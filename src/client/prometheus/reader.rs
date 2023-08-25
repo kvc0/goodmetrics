@@ -7,8 +7,8 @@ use crate::proto::goodmetrics::{dimension, measurement, Datum, Dimension, Histog
 
 lazy_static! {
     // # TYPE go_memstats_alloc_bytes gauge
-    static ref MEASUREMENT_TYPE: Regex = Regex::new(r#"^# TYPE (?P<measurement>\w+) (?P<type>[\w]+)$"#).unwrap();
-    static ref MEASUREMENT_NAME: Regex = Regex::new(r#"^(?P<measurement>\w+)"#).unwrap();
+    static ref MEASUREMENT_TYPE: Regex = Regex::new(r"^# TYPE (?P<measurement>\w+) (?P<type>[\w]+)$").unwrap();
+    static ref MEASUREMENT_NAME: Regex = Regex::new(r"^(?P<measurement>\w+)").unwrap();
 
     // http_request_duration_seconds_bucket{le="0.05"} 24054
     static ref HISTOGRAM_BUCKET: Regex = Regex::new(r#"\{.*le="(?P<le_bucket>[^"])".*\}\s*(?P<count>\d+)"#).unwrap();
