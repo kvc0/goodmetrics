@@ -1,0 +1,38 @@
+[package]
+authors = ["Kenny"]
+name = "goodmetricsd"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "goodmetricsd"
+
+[dependencies]
+communication                   = { workspace = true }
+
+bb8                             = { workspace = true }
+bb8-postgres                    = { workspace = true }
+bytes                           = { workspace = true }
+clap                            = { workspace = true }
+console-subscriber              = { workspace = true }
+csv                             = { workspace = true }
+env_logger                      = { workspace = true }
+futures                         = { workspace = true }
+humantime                       = { workspace = true }
+itertools                       = { workspace = true }
+lazy_static                     = { workspace = true }
+log                             = { workspace = true }
+num_cpus                        = { workspace = true }
+postgres-types                  = { workspace = true }
+rcgen                           = { workspace = true }
+regex                           = { workspace = true }
+serde                           = { workspace = true }
+serde_derive                    = { workspace = true }
+serde_json                      = { workspace = true }
+socket2                         = { workspace = true }
+thiserror                       = { workspace = true }
+tokio                           = { workspace = true }
+tokio-postgres                  = { workspace = true }
+tokio-stream                    = { workspace = true }
+tonic                           = { workspace = true }
+tonic-reflection                = { workspace = true }

@@ -1,75 +1,56 @@
-[package]
-authors = ["Kenny"]
-name = "goodmetrics"
-version = "0.1.0"
-edition = "2021"
+[workspace]
+resolver = "2"
 
-[[bin]]
-name = "goodmetrics"
-path = "src/bin/client.rs"
+members = [
+    "communication",
+    "goodmetrics",
+    "goodmetricsd"
+]
 
-[[bin]]
-name = "goodmetricsd"
-path = "src/bin/server.rs"
+[workspace.dependencies]
+communication                   = { path = "communication" }
+goodmetrics                     = { path = "goodmetrics" }
+goodmetricsd                    = { path = "goodmetricsd" }
 
-
-[dependencies]
-tokio = { version = "1.32", features = ["full", "tracing"] }
-tokio-stream = { version = "0.1", features = ["net"]}
-console-subscriber = { version = "0.1" }
-
-hyper = { version = "0.14", features = ["full"] }
-tonic = { version = "0.9", features = ["tls"]} # , "compression" broken by console-subscriber=0.1.6
-tonic-reflection = { version = "0.9" }
-tower = { version = "0.4" }
-webpki = { version = "0.22" }
-rustls-native-certs = { version = "0.6" }
-tokio-rustls = { version = "0.24", features = ["dangerous_configuration"] }
-hyper-rustls = { version = "0.24", features = ["http2"] }
-rustls-pemfile = "1.0"
-tower-http = { version = "0.4", features = ["add-extension", "util"] }
-
-prost = { version = "0.11"}
-socket2 = { version = "0.5", features = ["all"]}
-num_cpus = { version = "1.16"}
-
-tokio-postgres = { version = "0.7", features = ["with-serde_json-1"]}
-postgres-types = { version = "0.2", features = ["derive"] }
-postgres-protocol = { version = "0.6" }
-bb8 = { version = "0.8" }
-bb8-postgres = { version = "0.8" }
-bytes = { version = "1.4" }
-rcgen = { version = "0.11" }
-csv = { version = "1.2" }
-
-serde = {version = "1.0", features = ["derive"]}
-serde_derive = {version = "1.0"}
-serde_json = {version = "1.0"}
+anyhow                          = { version = "1.0" }
+bb8                             = { version = "0.8" }
+bb8-postgres                    = { version = "0.8" }
+bytes                           = { version = "1.4" }
+clap                            = { version = "4.4", features = ["derive", "env"] }
+console-subscriber              = { version = "0.1" }
+csv                             = { version = "1.2" }
+dirs                            = { version = "5" }
+env_logger                      = { version = "0.10" }
+futures                         = { version = "0.3" }
+humantime                       = { version = "2.1" }
+hyper                           = { version = "0.14", features = ["full"] }
+hyper-rustls                    = { version = "0.24", features = ["http2"] }
+itertools                       = { version = "0.11" }
+lazy_static                     = { version = "1.4" }
+log                             = { version = "0.4" }
+num_cpus                        = { version = "1.16" }
+object-pool                     = { version = "0.5" }
+postgres-protocol               = { version = "0.6" }
+postgres-types                  = { version = "0.2", features = ["derive"] }
+prost                           = { version = "0.11" }
+rcgen                           = { version = "0.11" }
+regex                           = { version = "1.9" }
 # Disable the default-tls feature. It brings in openssl via native-tls which depends on openssl 1.1. But new ubuntu has v3...
-reqwest = { version = "0.11", default-features = false, features = [] }
-object-pool = { version = "0.5" }
-humantime = { version = "2.1" }
-
-clap = {version = "4.4", features = ["derive", "env"]}
-dirs = {version = "5"}
-lazy_static = {version = "1.4"}
-
-env_logger = { version = "0.10" }
-log = { version = "0.4" }
-anyhow = { version = "1.0" }
-
-itertools = { version = "0.11" }
-regex = { version = "1.9" }
-thiserror = { version = "1.0" }
-futures = { version = "0.3" }
-
-[build-dependencies]
-tonic-build = {version = "0.9", features = []}
-
-[package.metadata.cross.target.aarch64-unknown-linux-gnu]
-pre-build = [ "apt-get install -y unzip", "curl -L https://github.com/protocolbuffers/protobuf/releases/download/v21.9/protoc-21.9-linux-x86_64.zip -o protoc.zip", "unzip -o protoc.zip -d protoc", "mv protoc/bin/* /usr/local/bin/", "mv protoc/include/* /usr/local/include/",]
-zig = "2.26"
-
-[package.metadata.cross.target.x86_64-unknown-linux-gnu]
-pre-build = [ "apt-get install -y unzip", "curl -L https://github.com/protocolbuffers/protobuf/releases/download/v21.9/protoc-21.9-linux-x86_64.zip -o protoc.zip", "unzip -o protoc.zip -d protoc", "mv protoc/bin/* /usr/local/bin/", "mv protoc/include/* /usr/local/include/",]
-zig = "2.26"
+reqwest                         = { version = "0.11", default-features = false, features = [] }
+rustls-native-certs             = { version = "0.6" }
+rustls-pemfile                  = { version = "1.0" }
+serde                           = { version = "1.0", features = ["derive"] }
+serde_derive                    = { version = "1.0" }
+serde_json                      = { version = "1.0" }
+socket2                         = { version = "0.5", features = ["all"]}
+thiserror                       = { version = "1.0" }
+tokio                           = { version = "1.32", features = ["full", "tracing"] }
+tokio-stream                    = { version = "0.1", features = ["net"]}
+tonic                           = { version = "0.9", features = ["tls"]} # , "compression" broken by console-subscriber=0.1.6
+tonic-build                     = { version = "0.9", features = [] }
+tonic-reflection                = { version = "0.9" }
+tokio-rustls                    = { version = "0.24", features = ["dangerous_configuration"] }
+tower                           = { version = "0.4" }
+tower-http                      = { version = "0.4", features = ["add-extension", "util"] }
+tokio-postgres                  = { version = "0.7", features = ["with-serde_json-1"] }
+webpki                          = { version = "0.22" }

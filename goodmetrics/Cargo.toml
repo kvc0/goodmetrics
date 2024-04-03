@@ -1,0 +1,24 @@
+[package]
+authors = ["Kenny"]
+name = "goodmetrics"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "goodmetrics"
+
+[dependencies]
+communication                   = { workspace = true }
+
+anyhow                          = { workspace = true }
+clap                            = { workspace = true }
+dirs                            = { workspace = true }
+env_logger                      = { workspace = true }
+lazy_static                     = { workspace = true }
+log                             = { workspace = true }
+serde                           = { workspace = true }
+serde_json                      = { workspace = true }
+regex                           = { workspace = true }
+reqwest                         = { workspace = true }
+tokio                           = { workspace = true }
+tonic                           = { workspace = true }

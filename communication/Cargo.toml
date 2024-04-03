@@ -1,0 +1,19 @@
+[package]
+authors = ["Kenny"]
+name = "communication"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+
+[dependencies]
+hyper                           = { workspace = true }
+hyper-rustls                    = { workspace = true }
+prost                           = { workspace = true }
+serde                           = { workspace = true }
+tokio-rustls                    = { workspace = true }
+tonic                           = { workspace = true }
+tower                           = { workspace = true }
+
+[build-dependencies]
+tonic-build = {version = "0.9", features = []}

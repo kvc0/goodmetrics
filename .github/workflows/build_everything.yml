@@ -29,7 +29,7 @@ jobs:
     - name: clippy
       run: |
         ./install_protoc.sh
-        cargo clippy --all-targets --all-features -- -D warnings
+        cargo clippy --all-targets --all-features -- -D warnings -W clippy::unwrap_used
   macos:
     name: macos
     runs-on: macos-latest

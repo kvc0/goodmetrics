@@ -2,8 +2,8 @@
 *
 
 # Whitelists
-!src
-!proto
+!communication
+!goodmetrics
+!goodmetricsd
 !Cargo*
-!build.rs
 !.dockerignore
